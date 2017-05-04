@@ -17,6 +17,8 @@ import random
 import threading
 import time
 from pyspark.streaming import DStream
+import pydoop.hdfs as hdfs
+
 from . import reservation
 from . import TFManager
 from . import TFSparkNode
@@ -221,7 +223,11 @@ def reserve(sc, num_executors, num_ps, tensorboard=False, input_mode=InputMode.T
 
     if tb_url is not None:
       logging.info("TensorBoard running at: {0}".format(tb_url))
-
+      hops_user = os.environ["SPARK_USER"];
+      hops_user_split = hops_user.split("__");
+      project = hops_user_split[0];
+      hdfs.dump(tb_url, "hdfs:///Projects/"+ project + "/Resources/.tensorboard." + sc.applicationId)
+    
     # since our "primary key" for each executor's TFManager is (host, ppid), sanity check for duplicates
     # Note: this may occur if Spark retries failed Python tasks on the same executor.
     tb_nodes = set()
@@ -238,7 +244,10 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
     """Runs TensorFlow processes on executors"""
     logging.info("Reserving TFSparkNodes {0}".format("w/ TensorBoard" if tensorboard else ""))
     assert num_ps < num_executors
-
+    
+    #in hopsworks we want the tensorboard to asways be true:
+    tensorboard=True
+    
     # build a cluster_spec template using worker_nums
     cluster_template = {}
     cluster_template['ps'] = range(num_ps)
@@ -291,8 +300,13 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
       logging.info(node)
       if node['tb_port'] != 0:
         tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
-
+        
     if tb_url is not None:
+      hops_user = os.environ["SPARK_USER"];
+      hops_user_split = hops_user.split("__");
+      project = hops_user_split[0];
+      hdfs.dump(tb_url, "hdfs:///Projects/"+ project + "/Resources/.tensorboard." + sc.applicationId)
+     
       logging.info("========================================================================================")
       logging.info("")
       logging.info("TensorBoard running at:       {0}".format(tb_url))
