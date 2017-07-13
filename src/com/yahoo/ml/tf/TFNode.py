@@ -61,7 +61,7 @@ def start_cluster_server(ctx, num_gpus=0, rdma=False):
         logging.info("{0}: Using {1}: {2}".format(ctx.worker_num, gpu_prompt, gpus_to_use))
 
         # Set GPU device to use for TensorFlow
-        os.environ['CUDA_VISIBLE_DEVICES'] = gpus_to_use
+        # os.environ['CUDA_VISIBLE_DEVICES'] = gpus_to_use
 
         # Create a cluster from the parameter server and worker hosts.
         cluster = tf.train.ClusterSpec(cluster_spec)
