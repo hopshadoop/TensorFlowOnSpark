@@ -35,7 +35,7 @@ def hdfs_path(ctx, path):
       logging.warn("Unknown scheme {0} with relative path: {1}".format(ctx.defaultFS, path))
       return "{0}/{1}".format(ctx.defaultFS, path)
 
-def start_cluster_server(ctx, num_gpus=1, rdma=False):
+def start_cluster_server(ctx, num_gpus=0, rdma=False):
   """
   Wraps creation of TensorFlow Server in a distributed cluster.  This is intended to be invoked from the TF map_fun.
   """
@@ -53,7 +53,7 @@ def start_cluster_server(ctx, num_gpus=1, rdma=False):
       try:
         # override PS jobs to only reserve one GPU
         if ctx.job_name == 'ps':
-          num_gpus = 1
+          num_gpus = 0
 
         # Find a free gpu(s) to use
         gpus_to_use = gpu_info.get_gpus(num_gpus)
