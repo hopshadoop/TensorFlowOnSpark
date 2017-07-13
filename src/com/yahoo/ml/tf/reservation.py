@@ -132,6 +132,7 @@ class Server(MessageSocket):
             ps_worker_num = executor['worker_num']
             ps_task_index = executor['task_index']
 
+            #Found a worker with no GPU, but all should have GPUs!
             for candidate_replacement in cluster_info:
               if candidate_replacement['job_name'] == 'worker' and candidate_replacement['gpu_present'] == False:
                 executor['job_name'] = 'worker'
