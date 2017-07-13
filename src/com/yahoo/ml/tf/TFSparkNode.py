@@ -298,13 +298,13 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         addr = None
 
         if(gpus_are_present_on_workers):
-            #Valid parameter server, will not switch
+            #Valid parameter server, will not switch roles
             if job_name == 'ps' and gpu_present == False:
                 # PS nodes must be remotely accessible in order to shutdown from Spark driver.
                 TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
                 addr = (host, TFSparkNode.mgr.address[1])
 
-                #Invalid worker, will assume role as parameter server
+                #Invalid worker, all workers should have gpus, this one will assume role as parameter server
             if job_name == 'worker' and gpu_present == False:
                 # PS nodes must be remotely accessible in order to shutdown from Spark driver.
                 TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')

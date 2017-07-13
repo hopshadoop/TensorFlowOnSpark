@@ -43,23 +43,23 @@ class GPUPresence:
   def __init__(self, required):
     self.required = required
     self.lock = threading.RLock()
-    self.gpus_present = []
+    self.gpus_presence = []
 
   def add(self, meta):
     with self.lock:
-        self.gpus_present.append(meta)
+        self.gpus_presence.append(meta)
 
   def gpu_done(self):
     with self.lock:
-        return len(self.gpus_present) >= self.required
+        return len(self.gpus_presence) >= self.required
 
   def get(self):
     with self.lock:
-        return self.gpus_present
+        return self.gpus_presence
 
   def remaining(self):
     with self.lock:
-        return self.required - len(self.gpus_present)
+        return self.required - len(self.gpus_presence)
 
 class MessageSocket(object):
   """Abstract class w/ length-prefixed socket send/receive functions"""
@@ -94,7 +94,7 @@ class Server(MessageSocket):
   """Simple socket server with length prefixed pickle messages"""
   reservations = None
   done = False
-  gpu_present = None
+  gpu_presence = None
   gpu_done = False
 
   def __init__(self, count):
@@ -159,7 +159,7 @@ class Server(MessageSocket):
       rinfo = self.reservations.get()
       MessageSocket.send(self, sock, rinfo)
     elif msg_type == 'GPU_INFO':
-      rinfo = self.gpu_present.get()
+      rinfo = self.gpu_presence.get()
       MessageSocket.send(self, sock, rinfo)
     elif msg_type == 'STOP':
       logging.info("setting server.done")
@@ -254,8 +254,8 @@ class Client(MessageSocket):
       time.sleep(1)
     return self.get_reservations()
 
-  def register(self, gpu_is_present):
-    """Register reservation with server"""
+  def register_gpu_presence(self, gpu_is_present):
+    """Register gpu_presence with server"""
     resp = self._request('REG_EXECUTOR_GPU_PRESENCE', gpu_is_present)
     return resp
 
@@ -265,7 +265,7 @@ class Client(MessageSocket):
     return gpu_present
 
   def await_gpu_check(self):
-    """Poll until all checks have been done to find gpus are completed, then return True if any GPUs are present"""
+    """Poll until all checks have been done to find GPUs are completed, then return True if any GPUs are present"""
     done = False
     while not done:
       done = self._request('GPU_QUERY')
