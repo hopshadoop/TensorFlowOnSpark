@@ -272,6 +272,17 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         ppid = os.getppid()
         port = 0
 
+        from . import gpu_info
+        num_gpus, free_memory = gpu_info.get_free_gpu
+        gpu_present = False
+        if num_gpus > 0:
+            gpu_present = True
+
+        client = reservation.Client(cluster_meta['server_addr'])
+        client.register_gpu_presence(gpu_present)
+
+        gpus_are_present_on_workers = client.await_gpu_check
+
         # check for existing TFManagers
         if TFSparkNode.mgr is not None and str(TFSparkNode.mgr.get('state')) != "'stopped'":
             if TFSparkNode.cluster_id == cluster_id:
@@ -285,14 +296,34 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         # use a random uuid as the authkey
         authkey = uuid.uuid4().bytes
         addr = None
-        if job_name == 'ps':
-            # PS nodes must be remotely accessible in order to shutdown from Spark driver.
-            TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
-            addr = (host, TFSparkNode.mgr.address[1])
+
+        if(gpus_are_present_on_workers):
+            #Valid parameter server, will not switch
+            if job_name == 'ps' and gpu_present == False:
+                # PS nodes must be remotely accessible in order to shutdown from Spark driver.
+                TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
+                addr = (host, TFSparkNode.mgr.address[1])
+
+                #Invalid worker, will assume role as parameter server
+            if job_name == 'worker' and gpu_present == False:
+                # PS nodes must be remotely accessible in order to shutdown from Spark driver.
+                TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
+                addr = (host, TFSparkNode.mgr.address[1])
+
+                #Correct worker
+            else:
+                # worker nodes only need to be locally accessible within the executor for data feeding
+                TFSparkNode.mgr = TFManager.start(authkey, queues)
+                addr = TFSparkNode.mgr.address
         else:
-            # worker nodes only need to be locally accessible within the executor for data feeding
-            TFSparkNode.mgr = TFManager.start(authkey, queues)
-            addr = TFSparkNode.mgr.address
+            if job_name == 'ps':
+                # PS nodes must be remotely accessible in order to shutdown from Spark driver.
+                TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
+                addr = (host, TFSparkNode.mgr.address[1])
+            else:
+                # worker nodes only need to be locally accessible within the executor for data feeding
+                TFSparkNode.mgr = TFManager.start(authkey, queues)
+                addr = TFSparkNode.mgr.address
 
         # initialize mgr state
         TFSparkNode.mgr.set('state', 'running')
@@ -323,7 +354,6 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
             tb_pid = tb_proc.pid
 
         # check server to see if this task is being retried (i.e. already reserved)
-        client = reservation.Client(cluster_meta['server_addr'])
         cluster_info = client.get_reservations()
         tmp_sock = None
         node_meta = None
@@ -351,7 +381,8 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
               'tb_pid': tb_pid,
               'tb_port': tb_port,
               'addr': addr,
-              'authkey': authkey
+              'authkey': authkey,
+              'gpu_present': gpu_present
           }
           # register node metadata with server
           logging.info("TFSparkNode.reserve: {0}".format(node_meta))
