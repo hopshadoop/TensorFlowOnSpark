@@ -298,7 +298,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
     tb_url = None
     for node in cluster_info:
       logging.info(node)
-      if node['tb_port'] != 0:
+      if node['tb_port'] != 0 and node['job_name'] == 'worker' and node['task_index'] == 0:
         tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
         
     if tb_url is not None:
