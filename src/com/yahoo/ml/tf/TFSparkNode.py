@@ -281,7 +281,7 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         client = reservation.Client(cluster_meta['server_addr'])
         client.register_gpu_presence(gpu_present)
 
-        gpus_are_present_on_workers = client.await_gpu_check
+        gpus_are_present_on_executors = client.await_gpu_check
 
         # check for existing TFManagers
         if TFSparkNode.mgr is not None and str(TFSparkNode.mgr.get('state')) != "'stopped'":
@@ -297,14 +297,14 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         authkey = uuid.uuid4().bytes
         addr = None
 
-        if(gpus_are_present_on_workers):
-            #Valid parameter server, will not switch roles
+        if(gpus_are_present_on_executors):
+            #Valid parameter server, does not have GPUs
             if job_name == 'ps' and gpu_present == False:
                 # PS nodes must be remotely accessible in order to shutdown from Spark driver.
                 TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
                 addr = (host, TFSparkNode.mgr.address[1])
 
-                #Invalid worker, all workers should have gpus, this one will assume role as parameter server
+                #Invalid worker, all workers should have GPUs, this one will assume role as parameter server
             if job_name == 'worker' and gpu_present == False:
                 # PS nodes must be remotely accessible in order to shutdown from Spark driver.
                 TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
@@ -332,7 +332,7 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         # start TensorBoard if requested
         tb_pid = 0
         tb_port = 0
-        if tensorboard and job_name == 'worker' and task_index == 0:
+        if tensorboard:
             tb_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             tb_sock.bind(('',0))
             tb_port = tb_sock.getsockname()[1]
