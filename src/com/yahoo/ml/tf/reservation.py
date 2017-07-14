@@ -49,7 +49,7 @@ class GPUPresence:
     with self.lock:
         self.gpus_presence.append(meta)
 
-  def gpu_done(self):
+  def done(self):
     with self.lock:
         return len(self.gpus_presence) >= self.required
 
@@ -155,7 +155,7 @@ class Server(MessageSocket):
     elif msg_type == 'QUERY':
       MessageSocket.send(self, sock, self.reservations.done())
     elif msg_type == 'GPU_QUERY':
-      MessageSocket.send(self, sock, self.gpu_done())
+      MessageSocket.send(self, sock, self.gpu_presence.done())
     elif msg_type == 'QINFO':
       rinfo = self.reservations.get()
       MessageSocket.send(self, sock, rinfo)
