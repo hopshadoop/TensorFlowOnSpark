@@ -172,7 +172,7 @@ class TFCluster(object):
         """
         tb_url = None
         for node in self.cluster_info:
-          if node['tb_port'] != 0:
+          if node['tb_port'] != 0 and node['job_name'] == 'worker' and node['task_index'] == 0:
             tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
         return tb_url
 
