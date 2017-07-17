@@ -274,13 +274,15 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
 
         from . import gpu_info
         num_gpus, free_memory = gpu_info.get_free_gpu
+        logging.debug("TFSparkNode.reserve found {0} GPU(s) on {1}".format(num_gpus, job_name))
         gpu_present = False
         if num_gpus > 0:
             gpu_present = True
 
         client = reservation.Client(cluster_meta['server_addr'])
-        client.register_gpu_presence(gpu_present)
 
+        client.register_gpu_presence(gpu_present)
+        logging.debug("TFSparkNode.reserve job_name {0} gpu presence {1}".format(job_name, gpu_present))
         gpus_are_present_on_executors = client.await_gpu_check
 
         # check for existing TFManagers
@@ -298,13 +300,13 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         addr = None
 
         if(gpus_are_present_on_executors):
-            #Valid parameter server, does not have GPUs
+            #Valid PS, does not have GPUs, will be started as a PS
             if job_name == 'ps' and gpu_present == False:
                 # PS nodes must be remotely accessible in order to shutdown from Spark driver.
                 TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
                 addr = (host, TFSparkNode.mgr.address[1])
 
-                #Invalid worker, all workers should have GPUs, this one will assume role as parameter server
+                #Invalid worker, all workers should have GPUs, this one will assume role as PS
             if job_name == 'worker' and gpu_present == False:
                 # PS nodes must be remotely accessible in order to shutdown from Spark driver.
                 TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')

@@ -116,7 +116,6 @@ class Server(MessageSocket):
     logging.info("all reservations completed")
     #If GPU(s) have been requested for workers
     if gpus_are_present():
-        logging.info("mapping executors with GPUs to be workers, and rest to be parameter servers")
         switch_all_wrongly_placed_ps()
     return self.reservations.get()
 
@@ -124,17 +123,20 @@ class Server(MessageSocket):
   #The places are switched only if any parameter server have a GPU, meaning atleast one worker does not have a GPU
   def switch_all_wrongly_placed_ps():
     cluster_info = self.reservations.get()
+    logging.debug("Reservation.switch_all_wrongly_placed_ps: Trying to find ps with GPU to replace with a worker")
 
     for executor in cluster_info:
           #This is not allowed, one of the workers should be run on this executor
           #We need to fix it!
           if executor['job_name'] == 'ps' and executor['gpu_present']:
+            logging.debug("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
             ps_worker_num = executor['worker_num']
             ps_task_index = executor['task_index']
 
             #Found a worker with no GPU, but all should have GPUs!
             for candidate_replacement in cluster_info:
               if candidate_replacement['job_name'] == 'worker' and candidate_replacement['gpu_present'] == False:
+                logging.debug("Reservation.switch_all_wrongly_placed_ps: Found worker without GPU, performing switch with ps")
                 executor['job_name'] = 'worker'
                 executor['worker_num'] = candidate_replacement['worker_num']
                 executor['task_index'] = candidate_replacement['task_index']
