@@ -273,11 +273,8 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         ppid = os.getppid()
         port = 0
 
-        num_gpus, free_memory = gpu_info.get_free_gpu()
-        logging.debug("TFSparkNode.reserve found {0} GPU(s) on {1}".format(num_gpus, job_name))
-        gpu_present = False
-        if num_gpus > 0:
-            gpu_present = True
+        gpu_present = gpu_info.gpu_installed()
+        logging.debug("TFSparkNode.reserve found {0} GPU(s) {1}".format(job_name, gpu_present))
 
         client = reservation.Client(cluster_meta['server_addr'])
 
