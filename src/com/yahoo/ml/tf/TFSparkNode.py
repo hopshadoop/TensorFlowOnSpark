@@ -279,8 +279,9 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         client = reservation.Client(cluster_meta['server_addr'])
 
         client.register_gpu_presence(gpu_present)
-        logging.debug("TFSparkNode.reserve job_name {0} gpu presence {1}".format(job_name, gpu_present))
+        logging.info("TFSparkNode.reserve job_name {0} gpu presence {1}".format(job_name, gpu_present))
         gpus_are_present_on_executors = client.await_gpu_check
+        logging.info("TFSparkNode.reserve gpus are present on machines {0}".format(gpus_are_present_on_executors))
 
         # check for existing TFManagers
         if TFSparkNode.mgr is not None and str(TFSparkNode.mgr.get('state')) != "'stopped'":

@@ -275,7 +275,6 @@ class Client(MessageSocket):
     """Poll until all checks have been done to find GPUs are completed, then return True if any GPUs are present"""
     done = False
     while not done:
-      logging.info("waiting for {0} gpu_presence_checks".format(self.reservations.remaining()))
       done = self._request('GPU_QUERY')
       time.sleep(1)
     logging.info("GPU presence check complete")
