@@ -280,7 +280,7 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
 
         client.register_gpu_presence(gpu_present)
         logging.info("TFSparkNode.reserve job_name {0} gpu presence {1}".format(job_name, gpu_present))
-        gpus_are_present_on_executors = client.await_gpu_check
+        gpus_are_present_on_executors = client.await_gpu_check()
         logging.info("TFSparkNode.reserve gpus are present on machines {0}".format(gpus_are_present_on_executors))
 
         # check for existing TFManagers
