@@ -278,6 +278,7 @@ class Client(MessageSocket):
       logging.info("waiting for {0} gpu_presence_checks".format(self.reservations.remaining()))
       done = self._request('GPU_QUERY')
       time.sleep(1)
+    logging.info("GPU presence check complete")
     gpu_presence_arr = self.get_gpu_presence()
     for gpu_present in gpu_presence_arr:
         if gpu_present:
