@@ -289,6 +289,11 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
     t = threading.Thread(target=_start)
     t.start()
 
+    # wait for executors to check GPU presence
+    logging.info("Waiting for GPU presence check to start")
+    gpus_present = server.await_gpu_check()
+    logging.info("GPU check completed, gpus are present < {0} > ".format(gpus_present))
+
     # wait for executors to register and start TFNodes before continuing
     logging.info("Waiting for TFSparkNodes to start")
     cluster_info = server.await_reservations()
