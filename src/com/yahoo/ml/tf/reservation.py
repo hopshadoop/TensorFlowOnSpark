@@ -102,8 +102,8 @@ class Server(MessageSocket):
     self.reservations = Reservations(count)
     self.gpu_presence = GPUPresence(count)
 
-  def gpus_are_present():
-    for executor in cluster_info:
+  def gpus_are_present(self):
+    for executor in self.reservations.get():
       if executor['gpu_present'] == True:
         return True
     return False
@@ -115,13 +115,13 @@ class Server(MessageSocket):
       time.sleep(1)
     logging.info("all reservations completed")
     #If GPU(s) have been requested for workers
-    if gpus_are_present():
-        switch_all_wrongly_placed_ps()
+    if self.gpus_are_present():
+        self.switch_all_wrongly_placed_ps()
     return self.reservations.get()
 
   #Modifies clusterspec to switch executor for parameter server and worker
   #The places are switched only if any parameter server have a GPU, meaning atleast one worker does not have a GPU
-  def switch_all_wrongly_placed_ps():
+  def switch_all_wrongly_placed_ps(self):
     cluster_info = self.reservations.get()
     logging.debug("Reservation.switch_all_wrongly_placed_ps: Trying to find ps with GPU to replace with a worker")
 

@@ -32,6 +32,7 @@ import uuid
 from . import TFManager
 from . import reservation
 from . import marker
+from . import gpu_info
 
 class TFNodeContext:
     """This encapsulates key metadata for each TF node"""
@@ -272,8 +273,7 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         ppid = os.getppid()
         port = 0
 
-        from . import gpu_info
-        num_gpus, free_memory = gpu_info.get_free_gpu
+        num_gpus, free_memory = gpu_info.get_free_gpu()
         logging.debug("TFSparkNode.reserve found {0} GPU(s) on {1}".format(num_gpus, job_name))
         gpu_present = False
         if num_gpus > 0:
