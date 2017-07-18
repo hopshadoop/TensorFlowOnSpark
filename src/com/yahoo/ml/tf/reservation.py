@@ -149,14 +149,18 @@ class Server(MessageSocket):
     logging.debug("received: {0}".format(msg))
     msg_type = msg['type']
     if msg_type == 'REG':
+      logging.info("register reservation")
       self.reservations.add(msg['data'])
       MessageSocket.send(self, sock, 'OK')
     if msg_type == 'REG_EXECUTOR_GPU_PRESENCE':
+      logging.info("register gpu presence")
       self.gpu_presence.add(msg['data'])
       MessageSocket.send(self, sock, 'OK')
     elif msg_type == 'QUERY':
+      logging.info("waiting for {0} reservations".format(self.reservations.remaining()))
       MessageSocket.send(self, sock, self.reservations.done())
     elif msg_type == 'GPU_QUERY':
+      logging.info("waiting for {0} gpu_presence".format(self.gpu_presence.remaining()))
       MessageSocket.send(self, sock, self.gpu_presence.done())
     elif msg_type == 'QINFO':
       rinfo = self.reservations.get()
@@ -271,6 +275,7 @@ class Client(MessageSocket):
     """Poll until all checks have been done to find GPUs are completed, then return True if any GPUs are present"""
     done = False
     while not done:
+      logging.info("waiting for {0} gpu_presence_checks".format(self.reservations.remaining()))
       done = self._request('GPU_QUERY')
       time.sleep(1)
     gpu_presence_arr = self.get_gpu_presence()
