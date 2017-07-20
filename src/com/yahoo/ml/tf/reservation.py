@@ -14,7 +14,7 @@ import struct
 import threading
 import time
 
-BUFSIZE = 1024
+BUFSIZE = 1024*8
 
 class Reservations:
 
@@ -33,7 +33,8 @@ class Reservations:
 
   def get(self):
     with self.lock:
-      return self.reservations
+        logging.info("Returning reservations array {0}".format(self.reservations))
+    return self.reservations
 
   def remaining(self):
     with self.lock:
@@ -81,13 +82,17 @@ class MessageSocket(object):
         data += buf
         recv_len -= len(buf)
       recv_done = (recv_len == 0)
-
+    logging.info("Receive data before {0}".format(data))
     msg = pickle.loads(data)
+    logging.info("Pickle {0}".format(msg))
     return msg
 
   def send(self, sock, msg):
+    logging.info("send debug: msg {0}".format(msg))
     data = pickle.dumps(msg)
+    logging.info("send debug: data {0}".format(data))
     buf = struct.pack('>I', len(data)) + data
+    logging.info("send debug: buf {0}".format(buf))
     sock.sendall(buf)
 
 class Server(MessageSocket):
@@ -95,7 +100,6 @@ class Server(MessageSocket):
   reservations = None
   done = False
   gpu_presence = None
-  gpu_done = False
 
   def __init__(self, count):
     assert count > 0
@@ -119,14 +123,14 @@ class Server(MessageSocket):
         self.switch_all_wrongly_placed_ps()
     return self.reservations.get()
 
-    def await_gpu_check(self):
-      """Block until all reservations done"""
+  def await_gpu_check(self):
+    """Block until all reservations done"""
     while not self.gpu_presence.done():
       logging.info("waiting for {0} gpu checks".format(self.reservations.remaining()))
       time.sleep(1)
     logging.info("all gpu checks completed")
     #If GPU(s) have been requested for workers
-    gpu_presence_arr = self.get_gpu_presence()
+    gpu_presence_arr = self.gpu_presence.get()
     for gpu_present in gpu_presence_arr:
       if gpu_present:
         return True
@@ -161,11 +165,12 @@ class Server(MessageSocket):
   def handle_message(self, sock, msg):
     logging.debug("received: {0}".format(msg))
     msg_type = msg['type']
+    logging.info("REC MSG TYPE {0}".format(msg_type))
     if msg_type == 'REG':
       logging.info("register reservation")
       self.reservations.add(msg['data'])
       MessageSocket.send(self, sock, 'OK')
-    if msg_type == 'REG_EXECUTOR_GPU_PRESENCE':
+    elif msg_type == 'REG_EXECUTOR_GPU_PRESENCE':
       logging.info("register gpu presence")
       self.gpu_presence.add(msg['data'])
       MessageSocket.send(self, sock, 'OK')
@@ -177,6 +182,7 @@ class Server(MessageSocket):
       MessageSocket.send(self, sock, self.gpu_presence.done())
     elif msg_type == 'QINFO':
       rinfo = self.reservations.get()
+      logging.info("QINFO returns {0}".format(rinfo))
       MessageSocket.send(self, sock, rinfo)
     elif msg_type == 'GPU_INFO':
       rinfo = self.gpu_presence.get()
@@ -186,6 +192,7 @@ class Server(MessageSocket):
       MessageSocket.send(self, sock, 'OK')
       self.done = True
     else:
+      logging.info("ERR SENT! Type is {0}".format(msg_type))
       MessageSocket.send(self, sock, 'ERR')
 
   def start(self):
@@ -245,7 +252,7 @@ class Client(MessageSocket):
     """Helper function to wrap msg w/ msg_type"""
     msg = {}
     msg['type'] = msg_type
-    if msg_data:
+    if msg_data or ((msg_data == True) or (msg_data == False)):
       msg['data'] = msg_data
     MessageSocket.send(self, self.sock, msg)
     logging.debug("sent: {0}".format(msg))
@@ -272,7 +279,9 @@ class Client(MessageSocket):
     while not done:
       done = self._request('QUERY')
       time.sleep(1)
-    return self.get_reservations()
+    reservations = self.get_reservations()
+    logging.info("Returning CLUSTERSPEC {0}".format(reservations))
+    return reservations
 
   def register_gpu_presence(self, gpu_is_present):
     """Register gpu_presence with server"""

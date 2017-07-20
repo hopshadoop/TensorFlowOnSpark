@@ -297,7 +297,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
     # wait for executors to register and start TFNodes before continuing
     logging.info("Waiting for TFSparkNodes to start")
     cluster_info = server.await_reservations()
-    logging.info("All TFSparkNodes started")
+    logging.info("All TFSparkNodes started: CLUSTERSPEC {0}".format(cluster_info))
 
     # print cluster_info and extract TensorBoard URL
     tb_url = None
