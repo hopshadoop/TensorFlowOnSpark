@@ -82,24 +82,13 @@ def get_gpus(num_gpu=1):
   except subprocess.CalledProcessError as e:
     print ("nvidia-smi error", e.output)
 
-def gpu_installed():
-  try:
-      subprocess.check_output(["nvidia-smi"])
-      return True
-  except OSError as e:
-      return False
-
 # Function to get the gpu information
-def get_free_gpu(max_gpu_utilization=40, min_free_memory=0.5, num_gpu=0):
+def get_free_gpu(max_gpu_utilization=40, min_free_memory=0.5, num_gpu=1):
   def get_gpu_info():
     # Get the gpu information
-    gpu_info = []
-    try:
-        gpu_info = subprocess.check_output(["nvidia-smi", "--format=csv,noheader,nounits", "--query-gpu=index,memory.total,memory.free,memory.used,utilization.gpu"]).decode()
-        gpu_info = gpu_info.split('\n')
-    except OSError as e:
-        print("no nvidia-smi available")
-        return 0, 0
+    gpu_info = subprocess.check_output(["nvidia-smi", "--format=csv,noheader,nounits", "--query-gpu=index,memory.total,memory.free,memory.used,utilization.gpu"]).decode()
+    gpu_info = gpu_info.split('\n')
+
     gpu_info_array = []
 
     # Check each gpu
