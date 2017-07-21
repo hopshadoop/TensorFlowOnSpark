@@ -14,6 +14,8 @@ import random
 import subprocess
 import time
 
+from tensorflow.python.client import device_lib
+
 MAX_RETRIES=3
 
 def get_gpu():
@@ -81,6 +83,18 @@ def get_gpus(num_gpu=1):
     return ','.join(free_gpus[:num_gpu])
   except subprocess.CalledProcessError as e:
     print ("nvidia-smi error", e.output)
+
+def detect_gpu_present():
+    num_gpus = len(get_available_gpus())
+    if num_gpus > 0:
+     return True
+    else:
+     return False
+
+def get_available_gpus():
+  local_device_protos = device_lib.list_local_devices()
+  logging.info("Detecting local device list {0}".format(local_device_protos))
+  return [x.name for x in local_device_protos if x.device_type == 'GPU']
 
 # Function to get the gpu information
 def get_free_gpu(max_gpu_utilization=40, min_free_memory=0.5, num_gpu=1):
