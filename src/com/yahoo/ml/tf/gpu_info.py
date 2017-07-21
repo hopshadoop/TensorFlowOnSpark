@@ -14,7 +14,7 @@ import random
 import subprocess
 import time
 
-from tensorflow.python.client import device_lib
+import tensorflow as tf
 
 MAX_RETRIES=3
 
@@ -85,16 +85,20 @@ def get_gpus(num_gpu=1):
     print ("nvidia-smi error", e.output)
 
 def detect_gpu_present():
-    num_gpus = len(get_available_gpus())
+    num_gpus = get_available_gpu_num()
     if num_gpus > 0:
      return True
     else:
      return False
 
-def get_available_gpus():
-  local_device_protos = device_lib.list_local_devices()
-  logging.info("Detecting local device list {0}".format(local_device_protos))
-  return [x.name for x in local_device_protos if x.device_type == 'GPU']
+def get_available_gpu_num():
+   if tf.test.is_built_with_cuda():
+     libcudart = ct.cdll.LoadLibrary("libcudart.so")
+     device_count = ct.c_int()
+     libcudart.cudaGetDeviceCount(ct.byref(device_count))
+     return device_count
+   else:
+     return 0
 
 # Function to get the gpu information
 def get_free_gpu(max_gpu_utilization=40, min_free_memory=0.5, num_gpu=1):
