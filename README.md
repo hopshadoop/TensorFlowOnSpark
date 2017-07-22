@@ -21,14 +21,9 @@ cluster with the following steps:
 
 1. **Startup** - launches the Tensorflow main function on the executors, along with listeners for data/control messages.
 1. **Data ingestion**
-  - **Readers & QueueRunners** - leverages TensorFlow's [Reader](https://www.tensorflow.org/how_tos/reading_data/#reading_from_files) mechanism to read data files directly from HDFS.
-  - **Feeding** - sends Spark RDD data into the TensorFlow nodes using the [feed_dict](https://www.tensorflow.org/how_tos/reading_data/#feeding) mechanism.  Note that we leverage the [Hadoop Input/Output Format](https://github.com/tensorflow/ecosystem/tree/master/hadoop) for access to TFRecords on HDFS.
+   - **Readers & QueueRunners** - leverages TensorFlow's [Reader](https://www.tensorflow.org/how_tos/reading_data/#reading_from_files) mechanism to read data files directly from HDFS.
+   - **Feeding** - sends Spark RDD data into the TensorFlow nodes using the [feed_dict](https://www.tensorflow.org/how_tos/reading_data/#feeding) mechanism.  Note that we leverage the [Hadoop Input/Output Format](https://github.com/tensorflow/ecosystem/tree/master/hadoop) for access to TFRecords on HDFS.
 1. **Shutdown** - shuts down the Tensorflow workers and PS nodes on the executors.
-
-We have also
-[enhanced](https://github.com/yahoo/tensorflow/tree/yahoo) TensorFlow
-to support direct access to remote memory (RDMA) on Infiniband
-networks.
 
 TensorFlowOnSpark was developed by Yahoo for large-scale distributed
 deep learning on our Hadoop clusters in Yahoo's private cloud. 
