@@ -82,17 +82,12 @@ class MessageSocket(object):
         data += buf
         recv_len -= len(buf)
       recv_done = (recv_len == 0)
-    logging.info("Receive data before {0}".format(data))
     msg = pickle.loads(data)
-    logging.info("Pickle {0}".format(msg))
     return msg
 
   def send(self, sock, msg):
-    logging.info("send debug: msg {0}".format(msg))
     data = pickle.dumps(msg)
-    logging.info("send debug: data {0}".format(data))
     buf = struct.pack('>I', len(data)) + data
-    logging.info("send debug: buf {0}".format(buf))
     sock.sendall(buf)
 
 class Server(MessageSocket):
@@ -140,20 +135,20 @@ class Server(MessageSocket):
   #The places are switched only if any parameter server have a GPU, meaning atleast one worker does not have a GPU
   def switch_all_wrongly_placed_ps(self):
     cluster_info = self.reservations.get()
-    logging.debug("Reservation.switch_all_wrongly_placed_ps: Trying to find ps with GPU to replace with a worker")
+    logging.info("Reservation.switch_all_wrongly_placed_ps: Trying to find ps with GPU to replace with a worker")
 
     for executor in cluster_info:
           #This is not allowed, one of the workers should be run on this executor
           #We need to fix it!
           if executor['job_name'] == 'ps' and executor['gpu_present']:
-            logging.debug("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
+            logging.info("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
             ps_worker_num = executor['worker_num']
             ps_task_index = executor['task_index']
 
             #Found a worker with no GPU, but all should have GPUs!
             for candidate_replacement in cluster_info:
               if candidate_replacement['job_name'] == 'worker' and candidate_replacement['gpu_present'] == False:
-                logging.debug("Reservation.switch_all_wrongly_placed_ps: Found worker without GPU, performing switch with ps")
+                logging.info("Reservation.switch_all_wrongly_placed_ps: Found worker without GPU, performing switch with ps")
                 executor['job_name'] = 'worker'
                 executor['worker_num'] = candidate_replacement['worker_num']
                 executor['task_index'] = candidate_replacement['task_index']
@@ -165,13 +160,10 @@ class Server(MessageSocket):
   def handle_message(self, sock, msg):
     logging.debug("received: {0}".format(msg))
     msg_type = msg['type']
-    logging.info("REC MSG TYPE {0}".format(msg_type))
     if msg_type == 'REG':
-      logging.info("register reservation")
       self.reservations.add(msg['data'])
       MessageSocket.send(self, sock, 'OK')
     elif msg_type == 'REG_EXECUTOR_GPU_PRESENCE':
-      logging.info("register gpu presence")
       self.gpu_presence.add(msg['data'])
       MessageSocket.send(self, sock, 'OK')
     elif msg_type == 'QUERY':
@@ -182,7 +174,6 @@ class Server(MessageSocket):
       MessageSocket.send(self, sock, self.gpu_presence.done())
     elif msg_type == 'QINFO':
       rinfo = self.reservations.get()
-      logging.info("QINFO returns {0}".format(rinfo))
       MessageSocket.send(self, sock, rinfo)
     elif msg_type == 'GPU_INFO':
       rinfo = self.gpu_presence.get()
@@ -192,7 +183,6 @@ class Server(MessageSocket):
       MessageSocket.send(self, sock, 'OK')
       self.done = True
     else:
-      logging.info("ERR SENT! Type is {0}".format(msg_type))
       MessageSocket.send(self, sock, 'ERR')
 
   def start(self):
@@ -205,7 +195,7 @@ class Server(MessageSocket):
     host = socket.gethostname()
     port = server_sock.getsockname()[1]
     addr = (host,port)
-    logging.info("listening for reservations at {0}".format(addr))
+    logging.info("listening for reservations and gpu presence check at {0}".format(addr))
 
     def _listen(self, sock):
       CONNECTIONS = []
@@ -280,7 +270,6 @@ class Client(MessageSocket):
       done = self._request('QUERY')
       time.sleep(1)
     reservations = self.get_reservations()
-    logging.info("Returning CLUSTERSPEC {0}".format(reservations))
     return reservations
 
   def register_gpu_presence(self, gpu_is_present):
@@ -299,7 +288,6 @@ class Client(MessageSocket):
     while not done:
       done = self._request('GPU_QUERY')
       time.sleep(1)
-    logging.info("GPU presence check complete")
     gpu_presence_arr = self.get_gpu_presence()
     for gpu_present in gpu_presence_arr:
         if gpu_present:
