@@ -96,7 +96,7 @@ def get_available_gpu_num():
      libcudart = ct.cdll.LoadLibrary("libcudart.so")
      device_count = ct.c_int()
      libcudart.cudaGetDeviceCount(ct.byref(device_count))
-     return device_count
+     return device_count.value
    else:
      return 0
 
