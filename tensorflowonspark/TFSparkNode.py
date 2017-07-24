@@ -423,7 +423,7 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         if tmp_sock is not None:
           tmp_sock.close()        
 
-        # Background mode relies reuse of python worker in Spark.
+         # Background mode relies reuse of python worker in Spark.
         if background:
             # However, reuse of python worker can't work on Windows, we need to check if the current
             # script runs on Windows or not.
@@ -432,34 +432,30 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
             # Check if the config of reuse python worker is enabled on Spark.
             if not os.environ.get("SPARK_REUSE_WORKER"):
                 raise Exception("Background mode relies reuse of python worker on Spark. This config 'spark.python.worker.reuse' is not enabled on Spark. Please enable it before using background.")
-            # invoke the TensorFlow main function in a background thread
-            logging.info("Starting TensorFlow {0}:{1} on cluster node {2} on background process".format(job_name, task_index, worker_num))
-            p = multiprocessing.Process(target=fn, args=(tf_args, ctx))
-            p.start()
 
-        if ((job_name == 'ps' and not gpu_present) or (job_name == 'worker' and gpus_are_present_on_executors and not gpu_present)):
+        if job_name == 'ps' or background:
             # invoke the TensorFlow main function in a background thread
             logging.info("Starting TensorFlow {0}:{1} on cluster node {2} on background process".format(job_name, task_index, worker_num))
             p = multiprocessing.Process(target=fn, args=(tf_args, ctx))
             p.start()
 
             # for ps nodes only, wait indefinitely in foreground thread for a "control" event (None == "stop")
-            
-            queue = TFSparkNode.mgr.get_queue('control')
-            done = False
-            while not done:
-                msg =  queue.get(block=True)
-                logging.info("Got msg: {0}".format(msg))
-                if msg == None:
-                    logging.info("Terminating PS")
-                    TFSparkNode.mgr.set('state', 'stopped')
-                    done = True
-                queue.task_done()
+            if job_name == 'ps':
+                queue = TFSparkNode.mgr.get_queue('control')
+                done = False
+                while not done:
+                    msg =  queue.get(block=True)
+                    logging.info("Got msg: {0}".format(msg))
+                    if msg == None:
+                        logging.info("Terminating PS")
+                        TFSparkNode.mgr.set('state', 'stopped')
+                        done = True
+                    queue.task_done()
         else:
             # otherwise, just run TF function in the main executor/worker thread
             logging.info("Starting TensorFlow {0}:{1} on cluster node {2} on foreground thread".format(job_name, task_index, worker_num))
             fn(tf_args, ctx)
-            logging.info("Finished TensorFlow {0}:{1} on cluster node {2}".format(job_name, task_index, worker_num))
+logging.info("Finished TensorFlow {0}:{1} on cluster node {2}".format(job_name, task_index, worker_num))
 
     return _mapfn
 
