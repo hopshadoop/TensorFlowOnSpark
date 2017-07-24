@@ -143,7 +143,7 @@ class Server(MessageSocket):
     for outerIndex, executor in enumerate(self.reservations.get()):
           #This is not allowed, one of the workers should be run on this executor
           #We need to fix it!
-          if executor['job_name'] == 'ps' and executor['gpu_present']:
+          if executor['job_name'] == 'ps' and executor['gpu_present'] == True:
             logging.info("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
             ps_worker_num = executor['worker_num']
             ps_task_index = executor['task_index']

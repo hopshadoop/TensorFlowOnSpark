@@ -392,6 +392,10 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
           cluster_info = client.await_reservations()
           client.close()
 
+        job_name = node_meta['job_name']
+        task_index = node_meta['task_index']
+        worker_num = node_meta['worker_num']        
+
         # construct a TensorFlow clusterspec from cluster_info
         sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])
         spec = {}
@@ -417,7 +421,7 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
 
         # release port reserved for TF as late as possible
         if tmp_sock is not None:
-          tmp_sock.close()
+          tmp_sock.close()        
 
         # Background mode relies reuse of python worker in Spark.
         if background:
