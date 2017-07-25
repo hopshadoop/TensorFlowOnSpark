@@ -81,7 +81,7 @@ def reserve(cluster_spec, tensorboard, cluster_id, queues=['input', 'output']):
         for jobtype in cluster_spec:
             nodes = cluster_spec[jobtype]
             if worker_num in nodes:
-               job_name = jobtype
+application_1500880783488_0079               job_name = jobtype
                task_index = nodes.index(worker_num)
                break;
 
@@ -306,7 +306,7 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
                 addr = (host, TFSparkNode.mgr.address[1])
 
                 #Invalid worker, all workers should have GPUs, this one will assume role as PS
-            if job_name == 'worker' and gpu_present == False:
+            elif job_name == 'worker' and gpu_present == False:
                 # PS nodes must be remotely accessible in order to shutdown from Spark driver.
                 TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
                 addr = (host, TFSparkNode.mgr.address[1])
@@ -455,7 +455,7 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
             # otherwise, just run TF function in the main executor/worker thread
             logging.info("Starting TensorFlow {0}:{1} on cluster node {2} on foreground thread".format(job_name, task_index, worker_num))
             fn(tf_args, ctx)
-logging.info("Finished TensorFlow {0}:{1} on cluster node {2}".format(job_name, task_index, worker_num))
+            logging.info("Finished TensorFlow {0}:{1} on cluster node {2}".format(job_name, task_index, worker_num))
 
     return _mapfn
 
