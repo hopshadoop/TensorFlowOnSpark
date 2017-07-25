@@ -81,7 +81,7 @@ def reserve(cluster_spec, tensorboard, cluster_id, queues=['input', 'output']):
         for jobtype in cluster_spec:
             nodes = cluster_spec[jobtype]
             if worker_num in nodes:
-application_1500880783488_0079               job_name = jobtype
+               job_name = jobtype
                task_index = nodes.index(worker_num)
                break;
 
@@ -390,11 +390,16 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
           client.register(node_meta)
           # wait for other nodes to finish reservations
           cluster_info = client.await_reservations()
+          logging.info("TFSparkNode.run await_reservations: {0}".format(cluster_info))
           client.close()
 
-        job_name = node_meta['job_name']
-        task_index = node_meta['task_index']
-        worker_num = node_meta['worker_num']        
+        for node in cluster_info:
+            if ((node_meta['host'] == node['host']) and (node_meta['ppid'] == node['ppid'])):
+                job_name = node['job_name']
+                task_index = node['task_index']
+                worker_num = node['worker_num']
+                break
+
 
         # construct a TensorFlow clusterspec from cluster_info
         sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])
