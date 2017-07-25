@@ -27,34 +27,35 @@ class Reservations:
     with self.lock:
       self.reservations.append(meta)
       if self.remaining() == 0:
-        switch_all_wrongly_placed_ps()
-         #   if self.remaining() == 0:+   #     self.switch_all_wrongly_placed_ps()
+        self.switch_all_wrongly_placed_ps()
 
-
+      #Modifies clusterspec to switch executor for parameter server and worker
+  #The places are switched only if any parameter server have a GPU, meaning atleast one worker does not have a GPU
   def switch_all_wrongly_placed_ps(self):
-      logging.info("Reservation.switch_all_wrongly_placed_ps: Trying to find ps with GPU to replace with a worker")
+    logging.info("Reservation.switch_all_wrongly_placed_ps: Trying to find ps with GPU to replace with a worker")
 
-      for outerIndex, executor in enumerate(self.reservations.get()):
-          #This is not allowed, one of the workers should be run on this executor
-          #We need to fix it!
-          if executor['job_name'] == 'ps' and executor['gpu_present'] == True:
-            logging.info("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
-            ps_worker_num = executor['worker_num']
-            ps_task_index = executor['task_index']
+    for outerIndex, executor in enumerate(self.reservations):
+      #This is not allowed, one of the workers should be run on this executor
+      #We need to fix it!
+      if executor['job_name'] == 'ps' and executor['gpu_present'] == True:
+        logging.info("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
+        ps_worker_num = executor['worker_num']
+        ps_task_index = executor['task_index']
 
-            #Found a worker with no GPU, but all should have GPUs!
-            for innerIndex, candidate_replacement in enumerate(self.reservations.get()):
-              if candidate_replacement['job_name'] == 'worker' and candidate_replacement['gpu_present'] == False:
-                logging.info("Reservation.switch_all_wrongly_placed_ps: Found worker without GPU, performing switch with ps")
-                executor['job_name'] = 'worker'
-                executor['worker_num'] = candidate_replacement['worker_num']
-                executor['task_index'] = candidate_replacement['task_index']
-                candidate_replacement['job_name'] = 'ps'
-                candidate_replacement['worker_num'] = ps_worker_num
-                candidate_replacement['task_index'] = ps_task_index
-                self.reservations.replace(innerIndex, candidate_replacement)
-                self.reservations.replace(outerIndex, executor)
-                break
+        #Found a worker with no GPU, but all should have GPUs!
+        for innerIndex, candidate_replacement in enumerate(self.reservations):
+          if candidate_replacement['job_name'] == 'worker' and candidate_replacement['gpu_present'] == False:
+            logging.info("Reservation.switch_all_wrongly_placed_ps: Found worker without GPU, performing switch with ps")
+            executor['job_name'] = 'worker'
+            executor['worker_num'] = candidate_replacement['worker_num']
+            executor['task_index'] = candidate_replacement['task_index']
+            candidate_replacement['job_name'] = 'ps'
+            candidate_replacement['worker_num'] = ps_worker_num
+            candidate_replacement['task_index'] = ps_task_index
+            self.reservations[innerIndex] = candidate_replacement
+            self.reservations[outerIndex] = executor
+            break
+
 
   def done(self):
     with self.lock:
@@ -64,10 +65,6 @@ class Reservations:
     with self.lock:
         logging.info("Returning reservations array {0}".format(self.reservations))
     return self.reservations
-
-  def replace(self, index, value):
-    with self.lock:
-        self.reservations[index] = value
 
   def remaining(self):
     with self.lock:
@@ -134,21 +131,12 @@ class Server(MessageSocket):
     self.reservations = Reservations(count)
     self.gpu_presence = GPUPresence(count)
 
-  def gpus_are_present(self):
-    for executor in self.reservations.get():
-      if executor['gpu_present'] == True:
-        return True
-    return False
-
   def await_reservations(self):
     """Block until all reservations done"""
     while not self.reservations.done():
       logging.info("waiting for {0} reservations".format(self.reservations.remaining()))
       time.sleep(1)
     logging.info("all reservations completed")
-    #If GPU(s) have been requested for workers
-    if self.gpus_are_present():
-        self.switch_all_wrongly_placed_ps()
     return self.reservations.get()
 
   def await_gpu_check(self):
@@ -163,33 +151,6 @@ class Server(MessageSocket):
       if gpu_present:
         return True
     return False
-
-  #Modifies clusterspec to switch executor for parameter server and worker
-  #The places are switched only if any parameter server have a GPU, meaning atleast one worker does not have a GPU
-  def switch_all_wrongly_placed_ps(self):
-    logging.info("Reservation.switch_all_wrongly_placed_ps: Trying to find ps with GPU to replace with a worker")
-
-    for outerIndex, executor in enumerate(self.reservations.get()):
-          #This is not allowed, one of the workers should be run on this executor
-          #We need to fix it!
-          if executor['job_name'] == 'ps' and executor['gpu_present'] == True:
-            logging.info("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
-            ps_worker_num = executor['worker_num']
-            ps_task_index = executor['task_index']
-
-            #Found a worker with no GPU, but all should have GPUs!
-            for innerIndex, candidate_replacement in enumerate(self.reservations.get()):
-              if candidate_replacement['job_name'] == 'worker' and candidate_replacement['gpu_present'] == False:
-                logging.info("Reservation.switch_all_wrongly_placed_ps: Found worker without GPU, performing switch with ps")
-                executor['job_name'] = 'worker'
-                executor['worker_num'] = candidate_replacement['worker_num']
-                executor['task_index'] = candidate_replacement['task_index']
-                candidate_replacement['job_name'] = 'ps'
-                candidate_replacement['worker_num'] = ps_worker_num
-                candidate_replacement['task_index'] = ps_task_index
-                self.reservations.replace(innerIndex, candidate_replacement)
-                self.reservations.replace(outerIndex, executor)
-                break
 
   def handle_message(self, sock, msg):
     logging.debug("received: {0}".format(msg))
