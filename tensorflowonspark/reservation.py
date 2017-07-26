@@ -22,14 +22,14 @@ class Reservations:
     self.required = required
     self.lock = threading.RLock()
     self.reservations = []
-    self.done = False
+    self.check_done = False
 
   def add(self, meta):
     with self.lock:
       self.reservations.append(meta)
       if self.remaining() == 0:
         self.switch_all_wrongly_placed_ps()
-        self.done = True
+        self.check_done = True
 
       #Modifies clusterspec to switch executor for parameter server and worker
   #The places are switched only if any parameter server have a GPU, meaning atleast one worker does not have a GPU
@@ -60,7 +60,7 @@ class Reservations:
 
   def done(self):
     with self.lock:
-      return self.done
+      return self.check_done
 
   def get(self):
     with self.lock:
