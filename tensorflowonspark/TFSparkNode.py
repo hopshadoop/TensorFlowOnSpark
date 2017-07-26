@@ -273,7 +273,12 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         ppid = os.getppid()
         port = 0
 
-        gpu_present = gpu_info.detect_gpu_present()
+        #gpu_present = gpu_info.detect_gpu_present()
+
+        if job_name == 'ps':
+            gpu_present = True
+        else:
+            gpu_present = False
 
         logging.info("TFSparkNode.run job_name {0} GPU detection returns {1}".format(job_name, gpu_present))
 
