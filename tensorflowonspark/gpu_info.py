@@ -92,13 +92,25 @@ def detect_gpu_present():
      return False
 
 def get_available_gpu_num():
-   if tf.test.is_built_with_cuda():
-     libcudart = ct.cdll.LoadLibrary("libcudart.so")
-     device_count = ct.c_int()
-     libcudart.cudaGetDeviceCount(ct.byref(device_count))
-     return device_count.value
-   else:
+   if tf.test.is_built_with_cuda() == False:
      return 0
+   gpu_info = []
+   try:
+    gpu_info = subprocess.check_output(["nvidia-smi", "--format=csv,noheader,nounits", "--query-gpu=index,memory.total,memory.free,memory.used,utilization.gpu"]).decode()
+    gpu_info = gpu_info.split('\n')
+   except Exception as e:
+    return 0
+
+   gpu_info_array = []
+   # Check each gpu
+   for line in gpu_info:
+     if len(line) > 0:
+       val = line.split(',')
+       gpu_id, total_memory, free_memory, used_memory, gpu_util = line.split(',')
+
+       gpu_memory_util = float(used_memory)/float(total_memory)
+       gpu_info_array.append((float(gpu_util), gpu_memory_util, gpu_id))
+   return len(gpu_info_array)
 
 # Function to get the gpu information
 def get_free_gpu(max_gpu_utilization=40, min_free_memory=0.5, num_gpu=1):
