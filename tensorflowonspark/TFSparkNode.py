@@ -397,7 +397,6 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
             if ((node_meta['host'] == node['host']) and (node_meta['ppid'] == node['ppid'])):
                 job_name = node['job_name']
                 task_index = node['task_index']
-                worker_num = node['worker_num']
                 break
 
 
