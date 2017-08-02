@@ -226,7 +226,7 @@ def reserve(sc, num_executors, num_ps, tensorboard=False, input_mode=InputMode.T
       hops_user = os.environ["SPARK_USER"];
       hops_user_split = hops_user.split("__");
       project = hops_user_split[0];
-      hdfs.dump(tb_url, "hdfs:///Projects/"+ project + "/Resources/.tensorboard." + sc.applicationId)
+      hdfs.dump(tb_url, "hdfs:///Projects/"+ project + "/Resources/.tensorboard." + sc.applicationId, user=hops_user)
     
     # since our "primary key" for each executor's TFManager is (host, ppid), sanity check for duplicates
     # Note: this may occur if Spark retries failed Python tasks on the same executor.
@@ -305,7 +305,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
       hops_user = os.environ["SPARK_USER"];
       hops_user_split = hops_user.split("__");
       project = hops_user_split[0];
-      hdfs.dump(tb_url, "hdfs:///Projects/"+ project + "/Resources/.tensorboard." + sc.applicationId)
+      hdfs.dump(tb_url, "hdfs:///Projects/"+ project + "/Resources/.tensorboard." + sc.applicationId, user=hops_user)
      
       logging.info("========================================================================================")
       logging.info("")
