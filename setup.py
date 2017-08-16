@@ -1,13 +1,13 @@
 from setuptools import setup
 
 setup(
-  name = 'tensorflowonspark',
+  name = 'tfspark',
   packages = ['tensorflowonspark'],
   version = '1.0.2',
   description = 'Deep learning with TensorFlow on Apache Spark clusters',
   author = 'Yahoo, Inc.',
-  url = 'https://github.com/yahoo/TensorFlowOnSpark',
-  keywords = ['tensorflowonspark', 'tensorflow', 'spark', 'machine learning', 'yahoo'],
+  url = 'https://github.com/hopshadoop/TensorFlowOnSpark',
+  keywords = ['tensorflowonspark', 'tensorflow', 'spark', 'machine learning', 'yahoo', 'hops'],
   install_requires = ['tensorflow'],
   license = 'Apache 2.0',
   classifiers = [
