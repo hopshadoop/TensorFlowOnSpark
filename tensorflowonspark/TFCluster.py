@@ -292,12 +292,12 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
     # wait for executors to check GPU presence
     logging.info("Waiting for GPU presence check to start")
     gpus_present = server.await_gpu_check()
-    logging.info("GPU check completed, GPUs are present on workers {0} > ".format(gpus_present))
+    logging.info("All GPU checks completed")
 
     # wait for executors to register and start TFNodes before continuing
     logging.info("Waiting for TFSparkNodes to start")
     cluster_info = server.await_reservations()
-    logging.info("All TFSparkNodes started: CLUSTERSPEC {0}".format(cluster_info))
+    logging.info("All TFSparkNodes started")
 
     # print cluster_info and extract TensorBoard URL
     tb_url = None

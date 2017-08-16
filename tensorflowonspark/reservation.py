@@ -34,19 +34,19 @@ class Reservations:
       #Modifies clusterspec to switch executor for parameter server and worker
   #The places are switched only if any parameter server have a GPU, meaning atleast one worker does not have a GPU
   def switch_all_wrongly_placed_ps(self):
-    logging.info("Reservation.switch_all_wrongly_placed_ps: Trying to find ps with GPU to replace with a worker")
+    logging.debug("Reservation.switch_all_wrongly_placed_ps: Trying to find ps with GPU to replace with a worker")
 
     for outerIndex, executor in enumerate(self.reservations):
       #This is not allowed, one of the workers should be run on this executor
       #We need to fix it!
       if executor['job_name'] == 'ps' and executor['gpu_present'] == True:
-        logging.info("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
+        logging.debug("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
         ps_task_index = executor['task_index']
 
         #Found a worker with no GPU, but all should have GPUs!
         for innerIndex, candidate_replacement in enumerate(self.reservations):
           if candidate_replacement['job_name'] == 'worker' and candidate_replacement['gpu_present'] == False:
-            logging.info("Reservation.switch_all_wrongly_placed_ps: Found worker without GPU, performing switch with ps")
+            logging.debug("Reservation.switch_all_wrongly_placed_ps: Found worker without GPU, performing switch with ps")
 
             executor['job_name'] = 'worker'
             executor['task_index'] = candidate_replacement['task_index']
@@ -64,7 +64,7 @@ class Reservations:
 
   def get(self):
     with self.lock:
-        logging.info("Returning reservations array {0}".format(self.reservations))
+        logging.debug("Returning reservations array {0}".format(self.reservations))
     return self.reservations
 
   def remaining(self):
@@ -175,7 +175,6 @@ class Server(MessageSocket):
       rinfo = self.gpu_presence.get()
       MessageSocket.send(self, sock, rinfo)
     elif msg_type == 'STOP':
-      logging.info("setting server.done")
       MessageSocket.send(self, sock, 'OK')
       self.done = True
     else:

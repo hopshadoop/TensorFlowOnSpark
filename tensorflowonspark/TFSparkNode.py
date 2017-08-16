@@ -275,14 +275,13 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
 
         gpu_present = gpu_info.detect_gpu_present()
 
-        logging.info("TFSparkNode.run job_name {0} GPU detection returns {1}".format(job_name, gpu_present))
-
         client = reservation.Client(cluster_meta['server_addr'])
 
+        logging.info("TFSparkNode.run register: {0}".format(gpu_present))
         client.register_gpu_presence(gpu_present)
 
         gpus_are_present_on_executors = client.await_gpu_check()
-        logging.info("TFSparkNode.run GPUs are present on any machine returns {0}".format(gpus_are_present_on_executors))
+        logging.info("TFSparkNode.run await_gpu_check: {0}".format(gpus_are_present_on_executors))
 
         # check for existing TFManagers
         if TFSparkNode.mgr is not None and str(TFSparkNode.mgr.get('state')) != "'stopped'":
@@ -343,7 +342,6 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
             if 'PYSPARK_PYTHON' in os.environ:
               # user-specified Python (typically Python.zip)
               pypath = os.environ['PYSPARK_PYTHON']
-              logging.info("PYSPARK_PYTHON: {0}".format(pypath))
               pydir = os.path.dirname(pypath)
               tb_proc = subprocess.Popen([pypath, "%s/tensorboard"%pydir, "--logdir=%s"%logdir, "--port=%d"%tb_port, "--debug"])
             else:
@@ -404,7 +402,7 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])
         spec = {}
         for node in sorted_cluster_info:
-            logging.info("node: {0}".format(node))
+            logging.debug("node: {0}".format(node))
             (njob, nhost, nport) = (node['job_name'], node['host'], node['port'])
             hosts = [] if njob not in spec else spec[njob]
             hosts.append("{0}:{1}".format(nhost, nport))
