@@ -35,7 +35,7 @@ def hdfs_path(ctx, path):
       logging.warn("Unknown scheme {0} with relative path: {1}".format(ctx.defaultFS, path))
       return "{0}/{1}".format(ctx.defaultFS, path)
 
-def start_cluster_server(ctx, num_gpus=1, rdma=False):
+def start_cluster_server(ctx, num_gpus=0, rdma=False):
   """
   Wraps creation of TensorFlow Server in a distributed cluster.  This is intended to be invoked from the TF map_fun.
   """
@@ -52,16 +52,17 @@ def start_cluster_server(ctx, num_gpus=1, rdma=False):
     while not gpu_initialized:
       try:
         # override PS jobs to only reserve one GPU
-        if ctx.job_name == 'ps':
-          num_gpus = 1
+        # if ctx.job_name == 'ps':
+          # num_gpus = 0
 
         # Find a free gpu(s) to use
-        gpus_to_use = gpu_info.get_gpus(num_gpus)
-        gpu_prompt = "GPU" if num_gpus == 1 else "GPUs"
-        logging.info("{0}: Using {1}: {2}".format(ctx.worker_num, gpu_prompt, gpus_to_use))
+        # gpus_to_use = gpu_info.get_gpus(num_gpus)
+        # num_gpus = gpu_info.get_available_gpu_num()
+        # gpu_prompt = "GPU" if num_gpus == 1 else "GPUs"
+        # logging.info("{0}: Using {1}: {2}".format(ctx.worker_num, gpu_prompt, num_gpus))
 
         # Set GPU device to use for TensorFlow
-        os.environ['CUDA_VISIBLE_DEVICES'] = gpus_to_use
+        # os.environ['CUDA_VISIBLE_DEVICES'] = gpus_to_use
 
         # Create a cluster from the parameter server and worker hosts.
         cluster = tf.train.ClusterSpec(cluster_spec)
@@ -74,11 +75,11 @@ def start_cluster_server(ctx, num_gpus=1, rdma=False):
         gpu_initialized = True
       except Exception as e:
         print(e)
-        logging.error("{0}: Failed to allocate GPU, trying again...".format(ctx.worker_num))
-        time.sleep(10)
+        # logging.error("{0}: Failed to allocate GPU, trying again...".format(ctx.worker_num))
+        # time.sleep(10)
   else:
     # CPU
-    os.environ['CUDA_VISIBLE_DEVICES'] = ''
+    # os.environ['CUDA_VISIBLE_DEVICES'] = ''
     logging.info("{0}: Using CPU".format(ctx.worker_num))
 
     # Create a cluster from the parameter server and worker hosts.

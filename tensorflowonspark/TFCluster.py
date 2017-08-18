@@ -172,7 +172,7 @@ class TFCluster(object):
         """
         tb_url = None
         for node in self.cluster_info:
-          if node['tb_port'] != 0:
+          if node['tb_port'] != 0 and node['job_name'] == 'worker' and node['task_index'] == 0:
             tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
         return tb_url
 
@@ -289,6 +289,11 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
     t = threading.Thread(target=_start)
     t.start()
 
+    # wait for executors to check GPU presence
+    logging.info("Waiting for GPU presence check to start")
+    gpus_present = server.await_gpu_check()
+    logging.info("All GPU checks completed")
+
     # wait for executors to register and start TFNodes before continuing
     logging.info("Waiting for TFSparkNodes to start")
     cluster_info = server.await_reservations()
@@ -298,7 +303,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
     tb_url = None
     for node in cluster_info:
       logging.info(node)
-      if node['tb_port'] != 0:
+      if node['tb_port'] != 0 and node['job_name'] == 'worker' and node['task_index'] == 0:
         tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
         
     if tb_url is not None:
