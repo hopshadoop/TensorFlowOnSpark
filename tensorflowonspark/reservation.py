@@ -16,7 +16,8 @@ import time
 
 from . import util
 
-BUFSIZE = 1024
+BUFSIZE = 1024*2
+
 
 class Reservations:
 
@@ -24,22 +25,76 @@ class Reservations:
     self.required = required
     self.lock = threading.RLock()
     self.reservations = []
+    self.check_done = False
 
   def add(self, meta):
     with self.lock:
       self.reservations.append(meta)
+      if self.remaining() == 0:
+        self.switch_all_wrongly_placed_ps()
+        self.check_done = True
+
+      #Modifies clusterspec to switch executor for parameter server and worker
+  #The places are switched only if any parameter server have a GPU, meaning atleast one worker does not have a GPU
+  def switch_all_wrongly_placed_ps(self):
+    logging.debug("Reservation.switch_all_wrongly_placed_ps: Trying to find ps with GPU to replace with a worker")
+
+    for outerIndex, executor in enumerate(self.reservations):
+      #This is not allowed, one of the workers should be run on this executor
+      #We need to fix it!
+      if executor['job_name'] == 'ps' and executor['gpu_present'] == True:
+        logging.debug("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
+        ps_task_index = executor['task_index']
+
+        #Found a worker with no GPU, but all should have GPUs!
+        for innerIndex, candidate_replacement in enumerate(self.reservations):
+          if candidate_replacement['job_name'] == 'worker' and candidate_replacement['gpu_present'] == False:
+            logging.debug("Reservation.switch_all_wrongly_placed_ps: Found worker without GPU, performing switch with ps")
+
+            executor['job_name'] = 'worker'
+            executor['task_index'] = candidate_replacement['task_index']
+
+            candidate_replacement['job_name'] = 'ps'
+            candidate_replacement['task_index'] = ps_task_index
+
+            self.reservations[innerIndex] = candidate_replacement
+            self.reservations[outerIndex] = executor
+            break
 
   def done(self):
     with self.lock:
-      return len(self.reservations) >= self.required
+      return self.check_done
 
   def get(self):
     with self.lock:
-      return self.reservations
+        logging.debug("Returning reservations array {0}".format(self.reservations))
+    return self.reservations
 
   def remaining(self):
     with self.lock:
       return self.required - len(self.reservations)
+
+class GPUPresence:
+  def __init__(self, required):
+    self.required = required
+    self.lock = threading.RLock()
+    self.gpus_presence = []
+
+  def add(self, meta):
+    with self.lock:
+        self.gpus_presence.append(meta)
+
+  def done(self):
+    with self.lock:
+        return len(self.gpus_presence) >= self.required
+
+  def get(self):
+    with self.lock:
+        return self.gpus_presence
+
+  def remaining(self):
+    with self.lock:
+        return self.required - len(self.gpus_presence)
 
 class MessageSocket(object):
   """Abstract class w/ length-prefixed socket send/receive functions"""
@@ -61,7 +116,6 @@ class MessageSocket(object):
         data += buf
         recv_len -= len(buf)
       recv_done = (recv_len == 0)
-
     msg = pickle.loads(data)
     return msg
 
@@ -74,10 +128,12 @@ class Server(MessageSocket):
   """Simple socket server with length prefixed pickle messages"""
   reservations = None
   done = False
+  gpu_presence = None
 
   def __init__(self, count):
     assert count > 0
     self.reservations = Reservations(count)
+    self.gpu_presence = GPUPresence(count)
 
   def await_reservations(self):
     """Block until all reservations done"""
@@ -87,16 +143,39 @@ class Server(MessageSocket):
     logging.info("all reservations completed")
     return self.reservations.get()
 
+  def await_gpu_check(self):
+    """Block until all reservations done"""
+    while not self.gpu_presence.done():
+      logging.info("waiting for {0} gpu checks".format(self.reservations.remaining()))
+      time.sleep(1)
+    logging.info("all gpu checks completed")
+    #If GPU(s) have been requested for workers
+    gpu_presence_arr = self.gpu_presence.get()
+    for gpu_present in gpu_presence_arr:
+      if gpu_present:
+        return True
+    return False
+
   def handle_message(self, sock, msg):
     logging.debug("received: {0}".format(msg))
     msg_type = msg['type']
     if msg_type == 'REG':
       self.reservations.add(msg['data'])
       MessageSocket.send(self, sock, 'OK')
+    elif msg_type == 'REG_EXECUTOR_GPU_PRESENCE':
+      self.gpu_presence.add(msg['data'])
+      MessageSocket.send(self, sock, 'OK')
     elif msg_type == 'QUERY':
+      logging.info("waiting for {0} reservations".format(self.reservations.remaining()))
       MessageSocket.send(self, sock, self.reservations.done())
+    elif msg_type == 'GPU_QUERY':
+      logging.info("waiting for {0} gpu_presence".format(self.gpu_presence.remaining()))
+      MessageSocket.send(self, sock, self.gpu_presence.done())
     elif msg_type == 'QINFO':
       rinfo = self.reservations.get()
+      MessageSocket.send(self, sock, rinfo)
+    elif msg_type == 'GPU_INFO':
+      rinfo = self.gpu_presence.get()
       MessageSocket.send(self, sock, rinfo)
     elif msg_type == 'STOP':
       logging.info("setting server.done")
@@ -116,7 +195,7 @@ class Server(MessageSocket):
     host = util.get_ip_address()
     port = server_sock.getsockname()[1]
     addr = (host,port)
-    logging.info("listening for reservations at {0}".format(addr))
+    logging.info("listening for reservations and gpu presence check at {0}".format(addr))
 
     def _listen(self, sock):
       CONNECTIONS = []
@@ -163,7 +242,7 @@ class Client(MessageSocket):
     """Helper function to wrap msg w/ msg_type"""
     msg = {}
     msg['type'] = msg_type
-    if msg_data:
+    if msg_data or ((msg_data == True) or (msg_data == False)):
       msg['data'] = msg_data
     MessageSocket.send(self, self.sock, msg)
     logging.debug("sent: {0}".format(msg))
@@ -190,7 +269,30 @@ class Client(MessageSocket):
     while not done:
       done = self._request('QUERY')
       time.sleep(1)
-    return self.get_reservations()
+    reservations = self.get_reservations()
+    return reservations
+
+  def register_gpu_presence(self, gpu_is_present):
+    """Register gpu_presence with server"""
+    resp = self._request('REG_EXECUTOR_GPU_PRESENCE', gpu_is_present)
+    return resp
+
+  def get_gpu_presence(self):
+    """Get current list of reservations"""
+    gpu_present = self._request('GPU_INFO')
+    return gpu_present
+
+  def await_gpu_check(self):
+    """Poll until all checks have been done to find GPUs are completed, then return True if any GPUs are present"""
+    done = False
+    while not done:
+      done = self._request('GPU_QUERY')
+      time.sleep(1)
+    gpu_presence_arr = self.get_gpu_presence()
+    for gpu_present in gpu_presence_arr:
+        if gpu_present:
+            return True
+    return False
 
   def request_stop(self):
     resp = self._request('STOP')
