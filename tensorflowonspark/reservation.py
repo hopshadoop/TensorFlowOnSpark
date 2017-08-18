@@ -14,7 +14,10 @@ import struct
 import threading
 import time
 
+from . import util
+
 BUFSIZE = 1024*2
+
 
 class Reservations:
 
@@ -187,7 +190,8 @@ class Server(MessageSocket):
     server_sock.bind(('',0))
     server_sock.listen(1)
 
-    host = socket.gethostname()
+    # hostname may not be resolvable but IP address probably will be
+    host = util.get_ip_address()
     port = server_sock.getsockname()[1]
     addr = (host,port)
     logging.info("listening for reservations and gpu presence check at {0}".format(addr))
@@ -292,4 +296,3 @@ class Client(MessageSocket):
   def request_stop(self):
     resp = self._request('STOP')
     return resp
-
