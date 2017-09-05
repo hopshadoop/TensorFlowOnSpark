@@ -1,6 +1,9 @@
 #!/bin/bash
 
 set -e
+echo "cleaning dist/*"
+rm -rf dist/*
+
 echo "Generating the binary package...."
 python ./setup.py sdist
 
