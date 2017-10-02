@@ -32,10 +32,10 @@ import uuid
 from . import TFManager
 from . import reservation
 from . import marker
-
 from . import gpu_info
-
 from . import util
+from hopsutil import hdfs
+from hopsutil import tensorboard
 
 
 class TFNodeContext:
@@ -251,7 +251,7 @@ def start(fn, tf_args, cluster_info, defaultFS, working_dir, background):
 
     return _mapfn
 
-def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
+def run(fn, tf_args, cluster_meta, tensorboard, queues, background, app_id, run_id):
     """
     Wraps the TensorFlow main function in a Spark mapPartitions-compatible function.
     """
@@ -336,26 +336,6 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         # start TensorBoard if requested
         tb_pid = 0
         tb_port = 0
-        if tensorboard:
-            tb_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            tb_sock.bind(('',0))
-            tb_port = tb_sock.getsockname()[1]
-            tb_sock.close()
-            logdir = "tensorboard_%d" %(worker_num)
-
-            if 'PYSPARK_PYTHON' in os.environ:
-              # user-specified Python (typically Python.zip)
-              pypath = os.environ['PYSPARK_PYTHON']
-              logging.info("PYSPARK_PYTHON: {0}".format(pypath))
-              pydir = os.path.dirname(pypath)
-              tb_proc = subprocess.Popen([pypath, "%s/tensorboard"%pydir, "--logdir=%s"%logdir, "--port=%d"%tb_port, "--debug"])
-            else:
-              # system-installed Python & tensorboard
-              python_path = os.environ['PYTHONPATH'].split(os.pathsep)
-              for path in python_path:
-                  os.environ['PATH'] = os.environ['PATH'] + os.pathsep + os.path.dirname(path)
-              tb_proc = subprocess.Popen(["tensorboard", "--logdir=%s"%logdir, "--port=%d"%tb_port, "--debug"])
-            tb_pid = tb_proc.pid
 
         # check server to see if this task is being retried (i.e. already reserved)
         cluster_info = client.get_reservations()
@@ -402,6 +382,13 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
                 task_index = node['task_index']
                 break
 
+        if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
+            logging.info("PYSPARK_PYTHON: {0}".format(pypath))
+            hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, 0)
+            tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
+        elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
+            hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, 0)
+            tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
 
         # construct a TensorFlow clusterspec from cluster_info
         sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])

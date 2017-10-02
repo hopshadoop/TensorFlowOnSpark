@@ -29,6 +29,7 @@ class InputMode(object):
 
 class TFCluster(object):
 
+    run_id = 0
     sc = None
     defaultFS = None
     working_dir = None
@@ -46,6 +47,9 @@ class TFCluster(object):
         Starts the TensorFlow main function on each node/executor (per cluster_spec) in a background thread on the driver.
         DEPRECATED: use run() method instead of reserve/start.
         """
+
+        raise AttributeError("Hops TFoS does not support deprecated start(map_fun, tf_args) method, use run method instead")
+
         logging.info("Starting TensorFlow")
         def _start():
             self.nodeRDD.foreachPartition(TFSparkNode.start(map_fun,
@@ -285,9 +289,14 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
                                                 cluster_meta,
                                                 tensorboard,
                                                 queues,
-                                                background=(input_mode == InputMode.SPARK)))
+                                                background=(input_mode == InputMode.SPARK)),
+                                                str(sc.applicationId),
+                                                run_id)
     t = threading.Thread(target=_start)
     t.start()
+
+    global run_id
+    run_id += 1
 
     # wait for executors to check GPU presence
     logging.info("Waiting for GPU presence check to start")
@@ -298,25 +307,6 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
     logging.info("Waiting for TFSparkNodes to start")
     cluster_info = server.await_reservations()
     logging.info("All TFSparkNodes started")
-
-    # print cluster_info and extract TensorBoard URL
-    tb_url = None
-    for node in cluster_info:
-      logging.info(node)
-      if node['tb_port'] != 0 and node['job_name'] == 'worker' and node['task_index'] == 0:
-        tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
-        
-    if tb_url is not None:
-      hops_user = os.environ["SPARK_USER"];
-      hops_user_split = hops_user.split("__");
-      project = hops_user_split[0];
-      hdfs.dump(tb_url, "hdfs:///Projects/"+ project + "/Resources/.tensorboard." + sc.applicationId, user=hops_user)
-     
-      logging.info("========================================================================================")
-      logging.info("")
-      logging.info("TensorBoard running at:       {0}".format(tb_url))
-      logging.info("")
-      logging.info("========================================================================================")
 
     # since our "primary key" for each executor's TFManager is (host, ppid), sanity check for duplicates
     # Note: this may occur if Spark retries failed Python tasks on the same executor.
