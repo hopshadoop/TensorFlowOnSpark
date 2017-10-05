@@ -251,7 +251,7 @@ def start(fn, tf_args, cluster_info, defaultFS, working_dir, background):
 
     return _mapfn
 
-def run(fn, tf_args, cluster_meta, tensorboard, queues, background, app_id, run_id):
+def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
     """
     Wraps the TensorFlow main function in a Spark mapPartitions-compatible function.
     """
@@ -382,13 +382,13 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background, app_id, run_
                 task_index = node['task_index']
                 break
 
-        if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
-            logging.info("PYSPARK_PYTHON: {0}".format(pypath))
-            hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, 0)
-            tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
-        elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
-            hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, 0)
-            tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
+        #if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
+        #    logging.info("PYSPARK_PYTHON: {0}".format(pypath))
+        #    hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, 0)
+        #    tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
+        #elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
+        #    hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, 0)
+        #    tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
 
         # construct a TensorFlow clusterspec from cluster_info
         sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])
