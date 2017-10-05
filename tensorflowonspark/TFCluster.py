@@ -289,9 +289,9 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
                                                 cluster_meta,
                                                 tensorboard,
                                                 queues,
-                                                background=(input_mode == InputMode.SPARK)),
+                                                background=(input_mode == InputMode.SPARK),
                                                 str(sc.applicationId),
-                                                run_id)
+                                                run_id))
     t = threading.Thread(target=_start)
     t.start()
 
