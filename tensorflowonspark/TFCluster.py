@@ -280,6 +280,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
       'working_dir': working_dir,
       'server_addr': server_addr
     }
+    app_id = str(sc.applicationId)
     nodeRDD = sc.parallelize(range(num_executors), num_executors)
 
     # start TF on a background thread (on Spark driver) to allow for feeding job
@@ -289,6 +290,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
                                                  cluster_meta,
                                                  tensorboard,
                                                  queues,
+                                                 app_id,
                                                  background=(input_mode == InputMode.SPARK)))
     #str(sc.applicationId),
     #run_id,

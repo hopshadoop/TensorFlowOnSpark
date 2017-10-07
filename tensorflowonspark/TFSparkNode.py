@@ -251,7 +251,7 @@ def start(fn, tf_args, cluster_info, defaultFS, working_dir, background):
 
     return _mapfn
 
-def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
+def run(fn, tf_args, cluster_meta, tb, queues, app_id, background):
     """
     Wraps the TensorFlow main function in a Spark mapPartitions-compatible function.
     """
@@ -337,6 +337,16 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         tb_pid = 0
         tb_port = 0
 
+        #Temporary crap fix
+        os.environ['CLASSPATH'] = "/srv/hops/hadoop/share/hadoop/hdfs/lib/hops-leader-election-2.8.2.1.jar:" + os.environ['CLASSPATH']
+        os.environ['SPARK_DIST_CLASSPATH'] = "/srv/hops/hadoop/share/hadoop/hdfs/lib/hops-leader-election-2.8.2.1.jar:" + os.environ['SPARK_DIST_CLASSPATH']
+        os.environ['CLASSPATH'] = "/srv/hops/hadoop/share/hadoop/hdfs/lib/hops-leader-election-2.8.2.jar:" + os.environ['CLASSPATH']
+        os.environ['SPARK_DIST_CLASSPATH'] = "/srv/hops/hadoop/share/hadoop/hdfs/lib/hops-leader-election-2.8.2.jar:" + os.environ['SPARK_DIST_CLASSPATH']
+        os.environ['CLASSPATH'] = "/srv/hops-gpu/hadoop/share/hadoop/hdfs/lib/hops-leader-election-2.8.2.1.jar:" + os.environ['CLASSPATH']
+        os.environ['SPARK_DIST_CLASSPATH'] = "/srv/hops-gpu/hadoop/share/hadoop/hdfs/lib/hops-leader-election-2.8.2.1.jar:" + os.environ['SPARK_DIST_CLASSPATH']
+        #os.environ['HADOOP_CLASSPATH'] = "/srv/hops-gpu/hadoop/share/hadoop/hdfs/lib/hops-leader-election-2.8.2.jar:" + os.environ['HADOOP_CLASSPATH']
+
+
         # check server to see if this task is being retried (i.e. already reserved)
         cluster_info = client.get_reservations()
         tmp_sock = None
@@ -382,13 +392,13 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
                 task_index = node['task_index']
                 break
 
-        #if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
-        #    logging.info("PYSPARK_PYTHON: {0}".format(pypath))
-        #    hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, 0)
-        #    tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
-        #elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
-        #    hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, 0)
-        #    tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
+        if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
+            logging.info("PYSPARK_PYTHON: {0}".format(pypath))
+            hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, 0, 0)
+            tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
+        elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
+            hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, 0, 0)
+            tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
 
         # construct a TensorFlow clusterspec from cluster_info
         sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])
