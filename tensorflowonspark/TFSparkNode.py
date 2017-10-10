@@ -411,6 +411,7 @@ def run(fn, tf_args, cluster_meta, tb, queues, app_id, background):
             spec[njob] = hosts
 
         os.environ['HADOOP_USER_NAME'] = getpass.getuser()
+        os.environ['HADOOP_PROXY_USER'] = hdfs.project_user()
 
         # expand Hadoop classpath wildcards for JNI (Spark 2.x)
         if 'HADOOP_PREFIX' in os.environ:
