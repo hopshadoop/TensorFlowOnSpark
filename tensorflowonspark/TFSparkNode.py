@@ -393,7 +393,6 @@ def run(fn, tf_args, cluster_meta, tb, queues, app_id, background):
                 break
 
         if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
-            logging.info("PYSPARK_PYTHON: {0}".format(pypath))
             hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, 0, 0)
             tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
         elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
