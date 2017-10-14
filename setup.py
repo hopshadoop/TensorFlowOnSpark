@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
   name = 'tfspark',
   packages = ['tensorflowonspark'],
-  version = '1.1.3',
+  version = '1.1.4',
   description = 'Deep learning with TensorFlow on Apache Spark clusters',
   author = 'Yahoo, Inc.',
   url = 'https://github.com/hopshadoop/TensorFlowOnSpark',
