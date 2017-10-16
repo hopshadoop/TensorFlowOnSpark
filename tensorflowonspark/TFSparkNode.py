@@ -86,7 +86,7 @@ def _get_manager(cluster_info, host, ppid):
   logging.info("Connected to TFSparkNode.mgr on {0}, ppid={1}, state={2}".format(host, ppid, str(TFSparkNode.mgr.get('state'))))
   return TFSparkNode.mgr
 
-def reserve(cluster_spec, tensorboard, cluster_id, queues=['input', 'output']):
+def reserve(cluster_spec, tb, cluster_id, queues=['input', 'output']):
   """*DEPRECATED*. use run() method instead of reserve/start."""
   raise Exception("DEPRECATED: use run() method instead of reserve/start")
 
@@ -95,7 +95,7 @@ def start(fn, tf_args, cluster_info, defaultFS, working_dir, background):
   raise Exception("DEPRECATED: use run() method instead of reserve/start")
 
 
-def run(fn, tf_args, cluster_meta, tensorboard, queues, app_id, background):
+def run(fn, tf_args, cluster_meta, tb, queues, app_id, background):
   """Wraps the user-provided TensorFlow main function in a Spark mapPartitions function.
 
   Args:
@@ -207,12 +207,6 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, app_id, background):
     # start TensorBoard if requested
     tb_pid = 0
     tb_port = 0
-    if tensorboard and job_name == 'worker' and task_index == 0:
-      tb_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-      tb_sock.bind(('',0))
-      tb_port = tb_sock.getsockname()[1]
-      tb_sock.close()
-      logdir = "tensorboard_%d" % worker_num
 
     #Temporary crap fix
     os.environ['CLASSPATH'] = "/srv/hops/hadoop/share/hadoop/hdfs/lib/hops-leader-election-2.8.2.1.jar:" + os.environ['CLASSPATH']

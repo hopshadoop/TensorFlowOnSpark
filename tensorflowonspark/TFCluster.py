@@ -199,7 +199,7 @@ def reserve(sc, num_executors, num_ps, tensorboard=False, input_mode=InputMode.T
   """*DEPRECATED*. use run() method instead of reserve/start."""
   raise Exception("DEPRECATED: use run() method instead of reserve/start.")
 
-def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mode=InputMode.TENSORFLOW, queues=['input', 'output']):
+def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputMode.TENSORFLOW, queues=['input', 'output']):
   """Starts the TensorFlowOnSpark cluster and Runs the TensorFlow "main" function on the Spark executors
 
   Args:
@@ -217,9 +217,9 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
   """
 
   #in hopsworks we want the tensorboard to always be true:
-  tensorboard=True
+  tb=True
 
-  logging.info("Reserving TFSparkNodes {0}".format("w/ TensorBoard" if tensorboard else ""))
+  logging.info("Reserving TFSparkNodes {0}".format("w/ TensorBoard" if tb else ""))
   assert num_ps < num_executors
 
   # build a cluster_spec template using worker_nums
@@ -259,7 +259,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
       nodeRDD.foreachPartition(TFSparkNode.run(map_fun,
                                                  tf_args,
                                                  cluster_meta,
-                                                 tensorboard,
+                                                 tb,
                                                  queues,
                                                  app_id,
                                                  background=(input_mode == InputMode.SPARK)))
