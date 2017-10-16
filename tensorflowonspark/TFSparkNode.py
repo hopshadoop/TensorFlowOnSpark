@@ -95,7 +95,7 @@ def start(fn, tf_args, cluster_info, defaultFS, working_dir, background):
   raise Exception("DEPRECATED: use run() method instead of reserve/start")
 
 
-def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
+def run(fn, tf_args, cluster_meta, tensorboard, queues, app_id, background):
   """Wraps the user-provided TensorFlow main function in a Spark mapPartitions function.
 
   Args:

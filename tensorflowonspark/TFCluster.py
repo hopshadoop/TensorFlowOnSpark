@@ -200,13 +200,6 @@ def reserve(sc, num_executors, num_ps, tensorboard=False, input_mode=InputMode.T
   raise Exception("DEPRECATED: use run() method instead of reserve/start.")
 
 def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mode=InputMode.TENSORFLOW, queues=['input', 'output']):
-  """Runs TensorFlow processes on executors"""
-  logging.info("Reserving TFSparkNodes {0}".format("w/ TensorBoard" if tensorboard else ""))
-  assert num_ps < num_executors
-
-  #in hopsworks we want the tensorboard to asways be true:
-  tensorboard=True
-
   """Starts the TensorFlowOnSpark cluster and Runs the TensorFlow "main" function on the Spark executors
 
   Args:
@@ -222,6 +215,10 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
   Returns:
     A TFCluster object representing the started cluster.
   """
+
+  #in hopsworks we want the tensorboard to always be true:
+  tensorboard=True
+
   logging.info("Reserving TFSparkNodes {0}".format("w/ TensorBoard" if tensorboard else ""))
   assert num_ps < num_executors
 
