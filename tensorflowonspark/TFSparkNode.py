@@ -290,27 +290,18 @@ def run(fn, tf_args, cluster_meta, tensorboard, queues, background):
         tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
 
         # construct a TensorFlow clusterspec from cluster_info
-        sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])
-        spec = {}
-        for node in sorted_cluster_info:
-            logging.info("node: {0}".format(node))
-            (njob, nhost, nport) = (node['job_name'], node['host'], node['port'])
-            hosts = [] if njob not in spec else spec[njob]
-            hosts.append("{0}:{1}".format(nhost, nport))
-            spec[njob] = hosts
+    sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])
+    spec = {}
+    for node in sorted_cluster_info:
+        logging.info("node: {0}".format(node))
+        (njob, nhost, nport) = (node['job_name'], node['host'], node['port'])
+        hosts = [] if njob not in spec else spec[njob]
+        hosts.append("{0}:{1}".format(nhost, nport))
+        spec[njob] = hosts
 
-        os.environ['HADOOP_USER_NAME'] = getpass.getuser()
 
-        # expand Hadoop classpath wildcards for JNI (Spark 2.x)
-        if 'HADOOP_PREFIX' in os.environ:
-            classpath = os.environ['CLASSPATH']
-            hadoop_path = os.path.join(os.environ['HADOOP_PREFIX'], 'bin', 'hadoop')
-            hadoop_classpath = subprocess.check_output([hadoop_path, 'classpath', '--glob']).decode()
-            logging.debug("CLASSPATH: {0}".format(hadoop_classpath))
-            os.environ['CLASSPATH'] = classpath + os.pathsep + hadoop_classpath
-
-        # create a context object to hold metadata for TF
-        ctx = TFNodeContext(worker_num, job_name, task_index, spec, cluster_meta['default_fs'], cluster_meta['working_dir'], TFSparkNode.mgr)
+    # create a context object to hold metadata for TF
+    ctx = TFNodeContext(worker_num, job_name, task_index, spec, cluster_meta['default_fs'], cluster_meta['working_dir'], TFSparkNode.mgr)
 
     # release port reserved for TF as late as possible
     if tmp_sock is not None:
