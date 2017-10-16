@@ -41,18 +41,18 @@ class InputMode(object):
 
 class TFCluster(object):
 
-    run_id = 0
-    sc = None
-    defaultFS = None
-    working_dir = None
-    num_executors = None
-    nodeRDD = None
-    cluster_id = None
-    cluster_info = None
-    cluster_meta = None
-    input_mode = None
-    queues = None
-    server = None
+  run_id = 0
+  sc = None
+  defaultFS = None
+  working_dir = None
+  num_executors = None
+  nodeRDD = None
+  cluster_id = None
+  cluster_info = None
+  cluster_meta = None
+  input_mode = None
+  queues = None
+  server = None
 
   def start(self, map_fun, tf_args):
     """*DEPRECATED*. use run() method instead of reserve/start."""
@@ -200,7 +200,7 @@ def reserve(sc, num_executors, num_ps, tensorboard=False, input_mode=InputMode.T
   raise Exception("DEPRECATED: use run() method instead of reserve/start.")
 
 def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mode=InputMode.TENSORFLOW, queues=['input', 'output']):
-    """Runs TensorFlow processes on executors"""
+  """Runs TensorFlow processes on executors"""
   logging.info("Reserving TFSparkNodes {0}".format("w/ TensorBoard" if tensorboard else ""))
   assert num_ps < num_executors
 
@@ -243,55 +243,56 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
   server = reservation.Server(num_executors)
   server_addr = server.start()
 
-    # start TF nodes on all executors
-    logging.info("Starting TensorFlow on executors")
-    cluster_meta = {
-      'id': random.getrandbits(64),
-      'cluster_template': cluster_template,
-      'num_executors': num_executors,
-      'default_fs': defaultFS,
-      'working_dir': working_dir,
-      'server_addr': server_addr
-    }
-    app_id = str(sc.applicationId)
-    nodeRDD = sc.parallelize(range(num_executors), num_executors)
+  # start TF nodes on all executors
+  logging.info("Starting TensorFlow on executors")
+  cluster_meta = {
+    'id': random.getrandbits(64),
+    'cluster_template': cluster_template,
+    'num_executors': num_executors,
+    'default_fs': defaultFS,
+    'working_dir': working_dir,
+    'server_addr': server_addr
+  }
 
-    # start TF on a background thread (on Spark driver) to allow for feeding job
-    def _start():
-        nodeRDD.foreachPartition(TFSparkNode.run(map_fun,
+  app_id = str(sc.applicationId)
+  nodeRDD = sc.parallelize(range(num_executors), num_executors)
+
+  # start TF on a background thread (on Spark driver) to allow for feeding job
+  def _start():
+      nodeRDD.foreachPartition(TFSparkNode.run(map_fun,
                                                  tf_args,
                                                  cluster_meta,
                                                  tensorboard,
                                                  queues,
                                                  app_id,
                                                  background=(input_mode == InputMode.SPARK)))
-    #str(sc.applicationId),
-    #run_id,
-    t = threading.Thread(target=_start)
-    t.start()
+  #str(sc.applicationId),
+  #run_id,
+  t = threading.Thread(target=_start)
+  t.start()
 
-    #global run_id
-    #run_id += 1
+  #global run_id
+  #run_id += 1
 
-    # wait for executors to check GPU presence
-    logging.info("Waiting for GPU presence check to start")
-    gpus_present = server.await_gpu_check()
-    logging.info("All GPU checks completed")
+  # wait for executors to check GPU presence
+  logging.info("Waiting for GPU presence check to start")
+  gpus_present = server.await_gpu_check()
+  logging.info("All GPU checks completed")
 
-    # wait for executors to register and start TFNodes before continuing
-    logging.info("Waiting for TFSparkNodes to start")
-    cluster_info = server.await_reservations()
-    logging.info("All TFSparkNodes started")
+  # wait for executors to register and start TFNodes before continuing
+  logging.info("Waiting for TFSparkNodes to start")
+  cluster_info = server.await_reservations()
+  logging.info("All TFSparkNodes started")
 
-    # since our "primary key" for each executor's TFManager is (host, ppid), sanity check for duplicates
-    # Note: this may occur if Spark retries failed Python tasks on the same executor.
-    tb_nodes = set()
-    for node in cluster_info:
-      node_id = (node['host'],node['ppid'])
-      if node_id in tb_nodes:
-        raise Exception("Duplicate cluster node id detected (host={0}, ppid={1}).  Please ensure that (1) the number of executors >= number of TensorFlow nodes, (2) the number of tasks per executors == 1, and (3) TFCluster.shutdown() is successfully invoked when done.".format(node_id[0], node_id[1]))
-      else:
-        tb_nodes.add(node_id)
+  # since our "primary key" for each executor's TFManager is (host, ppid), sanity check for duplicates
+  # Note: this may occur if Spark retries failed Python tasks on the same executor.
+  tb_nodes = set()
+  for node in cluster_info:
+    node_id = (node['host'],node['ppid'])
+    if node_id in tb_nodes:
+      raise Exception("Duplicate cluster node id detected (host={0}, ppid={1}).  Please ensure that (1) the number of executors >= number of TensorFlow nodes, (2) the number of tasks per executors == 1, and (3) TFCluster.shutdown() is successfully invoked when done.".format(node_id[0], node_id[1]))
+    else:
+      tb_nodes.add(node_id)
 
   # create TFCluster object
   cluster = TFCluster()
