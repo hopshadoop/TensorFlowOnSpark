@@ -90,6 +90,7 @@ def start_cluster_server(ctx, num_gpus=0, rdma=False):
         cluster = tf.train.ClusterSpec(cluster_spec)
 
         # Create and start a server for the local task.
+        time.sleep(10)
         if rdma:
           server = tf.train.Server(cluster, ctx.job_name, ctx.task_index, protocol="grpc_rdma")
         else:
