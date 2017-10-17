@@ -256,13 +256,13 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
 
   # start TF on a background thread (on Spark driver) to allow for feeding job
   def _start():
-      nodeRDD.foreachPartition(TFSparkNode.run(map_fun,
-                                                 tf_args,
-                                                 cluster_meta,
-                                                 tb,
-                                                 queues,
-                                                 app_id,
-                                                 background=(input_mode == InputMode.SPARK)))
+    nodeRDD.foreachPartition(TFSparkNode.run(map_fun,
+                                             tf_args,
+                                             cluster_meta,
+                                             tb,
+                                             queues,
+                                             app_id,
+                                             background=(input_mode == InputMode.SPARK)))
   #str(sc.applicationId),
   #run_id,
   t = threading.Thread(target=_start)

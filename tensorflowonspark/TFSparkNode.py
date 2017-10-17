@@ -339,7 +339,7 @@ def run(fn, tf_args, cluster_meta, tb, queues, app_id, background):
             tensorboard.store()
         logging.info("Finished TensorFlow {0}:{1} on cluster node {2}".format(job_name, task_index, worker_num))
 
-    return _mapfn
+  return _mapfn
 
 def train(cluster_info, cluster_meta, qname='input'):
   """Feeds Spark partitions into the shared multiprocessing.Queue.
