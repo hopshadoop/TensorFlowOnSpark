@@ -58,6 +58,7 @@ class Reservations:
       if executor['job_name'] == 'ps' and executor['gpu_present'] == True:
         logging.debug("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
         ps_task_index = executor['task_index']
+        ps_worker_num = executor['worker_num']
 
         #Found a worker with no GPU, but all should have GPUs!
         for innerIndex, candidate_replacement in enumerate(self.reservations):
@@ -66,9 +67,11 @@ class Reservations:
 
             executor['job_name'] = 'worker'
             executor['task_index'] = candidate_replacement['task_index']
+            executor['worker_num'] = candidate_replacement['worker_num']
 
             candidate_replacement['job_name'] = 'ps'
             candidate_replacement['task_index'] = ps_task_index
+            candidate_replacement['worker_num'] = ps_worker_num
 
             self.reservations[innerIndex] = candidate_replacement
             self.reservations[outerIndex] = executor
