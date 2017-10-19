@@ -23,8 +23,8 @@ from . import reservation
 from . import marker
 from . import gpu_info
 from . import util
-from hopsutil import hdfs
-from hopsutil import tensorboard
+from hops import hdfs
+from hops import tensorboard
 
 
 class TFNodeContext:
