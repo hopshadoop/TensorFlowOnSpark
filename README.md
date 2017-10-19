@@ -1,9 +1,12 @@
 <!--
-Copyright 2017 Yahoo Inc.
+Copyright 2017 Yahoo Inc., Logical Clocks AB
 Licensed under the terms of the Apache 2.0 license.
 Please see LICENSE file in the project root for terms.
 -->
-# TensorFlowOnSpark
+# Hops version of TensorFlowOnSpark
+
+This version of TensorFlowOnSpark runs only on Hops Hadoop, not on Apache Hadoop clusters.
+
 
 ## What's TensorFlowOnSpark?
 
