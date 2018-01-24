@@ -282,6 +282,10 @@ def run(fn, tf_args, cluster_meta, tb, queues, app_id, background):
     elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
         hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, 0, param_string=None)
         tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
+    else:
+        tb_path = os.getcwd() + '/tensorboard_' + str(worker_num)
+        os.mkdir(tb_path)
+        tensorboard.exec_logdir = tb_path
 
         # construct a TensorFlow clusterspec from cluster_info
     sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])
