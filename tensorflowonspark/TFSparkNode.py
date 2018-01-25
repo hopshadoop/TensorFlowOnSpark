@@ -336,10 +336,6 @@ def run(fn, tf_args, cluster_meta, tb, queues, app_id, run_id, background):
         # otherwise, just run TF function in the main executor/worker thread
         logging.info("Starting TensorFlow {0}:{1} on cluster node {2} on foreground thread".format(job_name, task_index, worker_num))
         fn(tf_args, ctx)
-        if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
-            tensorboard.store()
-        elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
-            tensorboard.store()
         logging.info("Finished TensorFlow {0}:{1} on cluster node {2}".format(job_name, task_index, worker_num))
 
   return _mapfn
