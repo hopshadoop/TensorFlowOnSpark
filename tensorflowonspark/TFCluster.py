@@ -34,8 +34,6 @@ from . import reservation
 from . import TFManager
 from . import TFSparkNode
 
-run_id = 0
-
 class InputMode(object):
   """Enum for the input modes of data feeding."""
   TENSORFLOW = 0                #: TensorFlow application is responsible for reading any data.
@@ -255,8 +253,6 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
   app_id = str(sc.applicationId)
   nodeRDD = sc.parallelize(range(num_executors), num_executors)
 
-  global run_id
-
   # start TF on a background thread (on Spark driver) to allow for feeding job
   def _start():
     nodeRDD.foreachPartition(TFSparkNode.run(map_fun,
@@ -265,13 +261,11 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
                                              tb,
                                              queues,
                                              app_id,
-                                             run_id,
+                                             0,
                                              background=(input_mode == InputMode.SPARK)))
 
   t = threading.Thread(target=_start)
   t.start()
-
-  run_id += 1
 
   # wait for executors to check GPU presence
   logging.info("Waiting for GPU presence check to start")
