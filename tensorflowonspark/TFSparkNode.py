@@ -8,15 +8,12 @@ from __future__ import division
 from __future__ import nested_scopes
 from __future__ import print_function
 
-import getpass
 import logging
 import os
 import platform
-import random
 import socket
 import subprocess
 import multiprocessing
-import time
 import uuid
 from . import TFManager
 from . import reservation
@@ -25,8 +22,6 @@ from . import gpu_info
 from . import util
 from hops import hdfs
 from hops import tensorboard
-from hops import util
-import pydoop.hdfs
 
 
 class TFNodeContext:
