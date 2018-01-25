@@ -34,6 +34,8 @@ from . import reservation
 from . import TFManager
 from . import TFSparkNode
 
+run_id = 0
+
 class InputMode(object):
   """Enum for the input modes of data feeding."""
   TENSORFLOW = 0                #: TensorFlow application is responsible for reading any data.
@@ -41,7 +43,6 @@ class InputMode(object):
 
 class TFCluster(object):
 
-  run_id = 0
   sc = None
   defaultFS = None
   working_dir = None
