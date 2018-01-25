@@ -97,7 +97,7 @@ def start(fn, tf_args, cluster_info, defaultFS, working_dir, background):
   raise Exception("DEPRECATED: use run() method instead of reserve/start")
 
 
-def run(fn, tf_args, cluster_meta, tb, queues, app_id, background, tb_logdir):
+def run(fn, tf_args, cluster_meta, tb, queues, app_id, run_id, background):
   """Wraps the user-provided TensorFlow main function in a Spark mapPartitions function.
 
   Args:
@@ -278,44 +278,18 @@ def run(fn, tf_args, cluster_meta, tb, queues, app_id, background, tb_logdir):
             worker_num = node['worker_num']
             break
 
-    # When specifying your own TB path for same for all workers
-    if tb_logdir:
-        pypath = os.getenv("PYSPARK_PYTHON")
-
-        hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, 0, param_string=None)
-
-        #find free port
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind(('',0))
-        addr, port = s.getsockname()
-        s.close()
-        tb_path = util.find_tensorboard()
-        tb_proc = subprocess.Popen([pypath, tb_path, "--logdir=%s" % tb_logdir, "--port=%d" % port],
-                                   env=os.environ, preexec_fn=util.on_executor_exit('SIGTERM'))
-
-        host = socket.gethostname()
-        tb_url = "http://{0}:{1}".format(host, port)
-
-        endpoint = hdfs_appid_logdir + "/tensorboard.exec0"
-        pydoop.hdfs.dump(tb_url, endpoint, user=hdfs.project_user())
-
-        # Override tensorboard.logdir returned by hops library
-        os.environ['TENSORBOARD_LOGDIR'] = tb_logdir
-
+    if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
+        # When running with GPUs
+        hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, param_string='TensorFlowOnSpark')
+        tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
+    elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
+        # When running with no GPUs
+        hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, param_string='TensorFlowOnSpark')
+        tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
     else:
-        if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
-            # When running with GPUs
-            hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, 0, param_string=None)
-            tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
-        elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
-            # When running with no GPUs
-            hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, 0, param_string=None)
-            tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
-        else:
-            # For non-chief workers
-            tb_path = os.getcwd() + '/tensorboard_' + str(worker_num)
-            os.mkdir(tb_path)
-            tensorboard.exec_logdir = tb_path
+        # For non-chief workers
+        logdir = hdfs.project_path() + "/Logs/TensorFlow" + "/" + app_id + "/" + "runId." + str(run_id) + '/TensorFlowOnSpark'
+        tensorboard.events_logdir = logdir
 
         # construct a TensorFlow clusterspec from cluster_info
     sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])

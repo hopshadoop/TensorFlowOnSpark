@@ -254,6 +254,8 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
   app_id = str(sc.applicationId)
   nodeRDD = sc.parallelize(range(num_executors), num_executors)
 
+  global run_id
+
   # start TF on a background thread (on Spark driver) to allow for feeding job
   def _start():
     nodeRDD.foreachPartition(TFSparkNode.run(map_fun,
@@ -262,15 +264,13 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
                                              tb,
                                              queues,
                                              app_id,
-                                             tb_logdir,
+                                             run_id,
                                              background=(input_mode == InputMode.SPARK)))
-  #str(sc.applicationId),
-  #run_id,
+
   t = threading.Thread(target=_start)
   t.start()
 
-  #global run_id
-  #run_id += 1
+  run_id += 1
 
   # wait for executors to check GPU presence
   logging.info("Waiting for GPU presence check to start")
