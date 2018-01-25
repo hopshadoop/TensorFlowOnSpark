@@ -199,7 +199,7 @@ def reserve(sc, num_executors, num_ps, tensorboard=False, input_mode=InputMode.T
   """*DEPRECATED*. use run() method instead of reserve/start."""
   raise Exception("DEPRECATED: use run() method instead of reserve/start.")
 
-def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputMode.TENSORFLOW, queues=['input', 'output']):
+def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputMode.TENSORFLOW, tb_logdir=None, queues=['input', 'output']):
   """Starts the TensorFlowOnSpark cluster and Runs the TensorFlow "main" function on the Spark executors
 
   Args:
@@ -262,6 +262,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
                                              tb,
                                              queues,
                                              app_id,
+                                             tb_logdir,
                                              background=(input_mode == InputMode.SPARK)))
   #str(sc.applicationId),
   #run_id,
