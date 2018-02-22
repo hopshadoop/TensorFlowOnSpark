@@ -3,8 +3,8 @@ from setuptools import setup
 setup(
   name = 'tfspark',
   packages = ['tensorflowonspark'],
-  version = '1.3.1',
-  description = 'Hops Hadoop version of TensorFlow on Spark (not for Apache Hadoop)',
+  version = '1.3.2',
+  description = 'Hops Hadoop version of TensorFlow on Spark (not for Apache Hadoop), leverages GPU scheduling',
   author = 'Yahoo, Inc., Logical Clocks AB',
   url = 'https://github.com/hopshadoop/TensorFlowOnSpark',
   keywords = ['tensorflowonspark', 'tensorflow', 'spark', 'machine learning', 'yahoo', 'hops'],
