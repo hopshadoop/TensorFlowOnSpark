@@ -104,7 +104,7 @@ def _get_manager(cluster_info, host, ppid):
   logging.info("Connected to TFSparkNode.mgr on {0}, ppid={1}, state={2}".format(host, ppid, str(TFSparkNode.mgr.get('state'))))
   return TFSparkNode.mgr
 
-def run(fn, tf_args, cluster_meta, tensorboard, log_dir, queues, background):
+def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, background):
 
   """Wraps the user-provided TensorFlow main function in a Spark mapPartitions function.
 
@@ -163,45 +163,45 @@ def run(fn, tf_args, cluster_meta, tensorboard, log_dir, queues, background):
 
     # check for existing TFManagers
     if TFSparkNode.mgr is not None and str(TFSparkNode.mgr.get('state')) != "'stopped'":
-        if TFSparkNode.cluster_id == cluster_id:
-            # raise an exception to force Spark to retry this "reservation" task on another executor
-            raise Exception("TFManager already started on {0}, ppid={1}, state={2}".format(host, ppid, str(TFSparkNode.mgr.get("state"))))
-        else:
-            # old state, just continue with creating new manager
-            logging.warn("Ignoring old TFManager with cluster_id {0}, requested cluster_id {1}".format(TFSparkNode.cluster_id, cluster_id))
+      if TFSparkNode.cluster_id == cluster_id:
+        # raise an exception to force Spark to retry this "reservation" task on another executor
+        raise Exception("TFManager already started on {0}, ppid={1}, state={2}".format(host, ppid, str(TFSparkNode.mgr.get("state"))))
+      else:
+        # old state, just continue with creating new manager
+        logging.warn("Ignoring old TFManager with cluster_id {0}, requested cluster_id {1}".format(TFSparkNode.cluster_id, cluster_id))
 
-        # start a TFManager and get a free port
-        # use a random uuid as the authkey
+      # start a TFManager and get a free port
+      # use a random uuid as the authkey
     authkey = uuid.uuid4().bytes
     addr = None
 
     if(gpus_are_present_on_executors):
-        #Valid PS, does not have GPUs, will be started as a PS
-        if job_name == 'ps' and gpu_present == False:
-            # PS nodes must be remotely accessible in order to shutdown from Spark driver.
-            TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
-            addr = (host, TFSparkNode.mgr.address[1])
+      #Valid PS, does not have GPUs, will be started as a PS
+      if job_name == 'ps' and gpu_present == False:
+        # PS nodes must be remotely accessible in order to shutdown from Spark driver.
+        TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
+        addr = (host, TFSparkNode.mgr.address[1])
 
-        #Invalid worker, all workers should have GPUs, this one will assume role as PS
-        elif job_name == 'worker' and gpu_present == False:
-            # PS nodes must be remotely accessible in order to shutdown from Spark driver.
-            TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
-            addr = (host, TFSparkNode.mgr.address[1])
+      #Invalid worker, all workers should have GPUs, this one will assume role as PS
+      elif job_name == 'worker' and gpu_present == False:
+        # PS nodes must be remotely accessible in order to shutdown from Spark driver.
+        TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
+        addr = (host, TFSparkNode.mgr.address[1])
 
-        #Correct worker
-        else:
-            # worker nodes only need to be locally accessible within the executor for data feeding
-            TFSparkNode.mgr = TFManager.start(authkey, queues)
-            addr = TFSparkNode.mgr.address
+      #Correct worker
+      else:
+        # worker nodes only need to be locally accessible within the executor for data feeding
+        TFSparkNode.mgr = TFManager.start(authkey, queues)
+        addr = TFSparkNode.mgr.address
     else:
-        if job_name == 'ps':
-            # PS nodes must be remotely accessible in order to shutdown from Spark driver.
-            TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
-            addr = (host, TFSparkNode.mgr.address[1])
-        else:
-            # worker nodes only need to be locally accessible within the executor for data feeding
-            TFSparkNode.mgr = TFManager.start(authkey, queues)
-            addr = TFSparkNode.mgr.address
+      if job_name == 'ps':
+        # PS nodes must be remotely accessible in order to shutdown from Spark driver.
+        TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
+        addr = (host, TFSparkNode.mgr.address[1])
+      else:
+        # worker nodes only need to be locally accessible within the executor for data feeding
+        TFSparkNode.mgr = TFManager.start(authkey, queues)
+        addr = TFSparkNode.mgr.address
 
     # initialize mgr state
     TFSparkNode.mgr.set('state', 'running')
@@ -239,17 +239,17 @@ def run(fn, tf_args, cluster_meta, tensorboard, log_dir, queues, background):
       port = tmp_sock.getsockname()[1]
 
       node_meta = {
-      'worker_num': worker_num,
-      'host': host,
-      'ppid': ppid,
-      'job_name': job_name,
-      'task_index': task_index,
-      'port': port,
-      'tb_pid': tb_pid,
-      'tb_port': tb_port,
-      'addr': addr,
-      'authkey': authkey,
-      'gpu_present': gpu_present
+        'worker_num': worker_num,
+        'host': host,
+        'ppid': ppid,
+        'job_name': job_name,
+        'task_index': task_index,
+        'port': port,
+        'tb_pid': tb_pid,
+        'tb_port': tb_port,
+        'addr': addr,
+        'authkey': authkey,
+        'gpu_present': gpu_present
       }
 
       # register node metadata with server
@@ -271,34 +271,34 @@ def run(fn, tf_args, cluster_meta, tensorboard, log_dir, queues, background):
       spec[njob] = hosts
 
     for node in cluster_info:
-        if ((node_meta['host'] == node['host']) and (node_meta['ppid'] == node['ppid'])):
-            job_name = node['job_name']
-            task_index = node['task_index']
-            worker_num = node['worker_num']
-            break
+      if ((node_meta['host'] == node['host']) and (node_meta['ppid'] == node['ppid'])):
+        job_name = node['job_name']
+        task_index = node['task_index']
+        worker_num = node['worker_num']
+        break
 
     if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
-        # When running with GPUs
-        hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, param_string='TensorFlowOnSpark')
-        tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
+      # When running with GPUs
+      hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, param_string='TensorFlowOnSpark')
+      tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
     elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
-        # When running with no GPUs
-        hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, param_string='TensorFlowOnSpark')
-        tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
+      # When running with no GPUs
+      hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, param_string='TensorFlowOnSpark')
+      tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
     else:
-        # For non-chief workers
-        logdir = hdfs.project_path() + "/Logs/TensorFlow" + "/" + app_id + "/" + "runId." + str(run_id) + '/TensorFlowOnSpark'
-        tensorboard.events_logdir = logdir
+      # For non-chief workers
+      logdir = hdfs.project_path() + "/Logs/TensorFlow" + "/" + app_id + "/" + "runId." + str(run_id) + '/TensorFlowOnSpark'
+      tensorboard.events_logdir = logdir
 
-        # construct a TensorFlow clusterspec from cluster_info
+      # construct a TensorFlow clusterspec from cluster_info
     sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])
     spec = {}
     for node in sorted_cluster_info:
-        logging.info("node: {0}".format(node))
-        (njob, nhost, nport) = (node['job_name'], node['host'], node['port'])
-        hosts = [] if njob not in spec else spec[njob]
-        hosts.append("{0}:{1}".format(nhost, nport))
-        spec[njob] = hosts
+      logging.info("node: {0}".format(node))
+      (njob, nhost, nport) = (node['job_name'], node['host'], node['port'])
+      hosts = [] if njob not in spec else spec[njob]
+      hosts.append("{0}:{1}".format(nhost, nport))
+      spec[njob] = hosts
 
 
     # create a context object to hold metadata for TF
@@ -338,19 +338,19 @@ def run(fn, tf_args, cluster_meta, tensorboard, log_dir, queues, background):
         queue = TFSparkNode.mgr.get_queue('control')
         done = False
         while not done:
-            msg =  queue.get(block=True)
-            logging.info("Got msg: {0}".format(msg))
-            if msg == None:
-                logging.info("Terminating PS")
-                TFSparkNode.mgr.set('state', 'stopped')
-                done = True
-            queue.task_done()
+          msg =  queue.get(block=True)
+          logging.info("Got msg: {0}".format(msg))
+          if msg == None:
+            logging.info("Terminating PS")
+            TFSparkNode.mgr.set('state', 'stopped')
+            done = True
+          queue.task_done()
     else:
 
-        # otherwise, just run TF function in the main executor/worker thread
-        logging.info("Starting TensorFlow {0}:{1} on cluster node {2} on foreground thread".format(job_name, task_index, worker_num))
-        fn(tf_args, ctx)
-        logging.info("Finished TensorFlow {0}:{1} on cluster node {2}".format(job_name, task_index, worker_num))
+      # otherwise, just run TF function in the main executor/worker thread
+      logging.info("Starting TensorFlow {0}:{1} on cluster node {2} on foreground thread".format(job_name, task_index, worker_num))
+      fn(tf_args, ctx)
+      logging.info("Finished TensorFlow {0}:{1} on cluster node {2}".format(job_name, task_index, worker_num))
 
 
   return _mapfn
@@ -489,4 +489,3 @@ def shutdown(cluster_info, queues=['input']):
     return [True]
 
   return _shutdown
-

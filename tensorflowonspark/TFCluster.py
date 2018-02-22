@@ -181,14 +181,14 @@ class TFCluster(object):
         break
 
     def tensorboard_url(self):
-        """
-        Utility function to get Tensorboard URL
-        """
-        tb_url = None
-        for node in self.cluster_info:
-          if node['tb_port'] != 0 and node['job_name'] == 'worker' and node['task_index'] == 0:
-            tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
-        return tb_url
+      """
+      Utility function to get Tensorboard URL
+      """
+      tb_url = None
+      for node in self.cluster_info:
+        if node['tb_port'] != 0 and node['job_name'] == 'worker' and node['task_index'] == 0:
+          tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
+      return tb_url
 
 def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputMode.TENSORFLOW, log_dir=None, driver_ps_nodes=False, queues=['input', 'output']):
 
@@ -264,6 +264,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
                                              tf_args,
                                              cluster_meta,
                                              tb,
+                                             None,
                                              queues,
                                              app_id,
                                              0,
@@ -272,10 +273,12 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
   t = threading.Thread(target=_start)
   t.start()
 
+
   # wait for executors to check GPU presence
   logging.info("Waiting for GPU presence check to start")
   gpus_present = server.await_gpu_check()
   logging.info("All GPU checks completed")
+
 
   # wait for executors to register and start TFNodes before continuing
   logging.info("Waiting for TFSparkNodes to start")
