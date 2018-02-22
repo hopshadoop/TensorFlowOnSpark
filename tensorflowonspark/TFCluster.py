@@ -190,7 +190,7 @@ class TFCluster(object):
             tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
         return tb_url
 
-def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputMode.TENSORFLOW, queues=['input', 'output']):
+def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputMode.TENSORFLOW, log_dir=None, driver_ps_nodes=False, queues=['input', 'output']):
 
 
   """Starts the TensorFlowOnSpark cluster and Runs the TensorFlow "main" function on the Spark executors
@@ -217,8 +217,11 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
   logging.info("Reserving TFSparkNodes {0}".format("w/ TensorBoard" if tb else ""))
   assert num_ps < num_executors
 
-  if driver_ps_nodes and input_mode != InputMode.TENSORFLOW:
-    raise Exception('running PS nodes on driver locally is only supported in InputMode.TENSORFLOW')
+  if driver_ps_nodes:
+    raise Exception('running PS nodes on driver is not supported and not needed on Hops Hadoop, since we have GPU scheduling.')
+
+  if log_dir:
+    raise Exception('No need to specify log_dir directory, we save TensorBoard events in the directory returned by tensorboard.logdir for you')
 
   # build a cluster_spec template using worker_nums
   cluster_template = {}
