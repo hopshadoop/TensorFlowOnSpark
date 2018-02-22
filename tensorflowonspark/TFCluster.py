@@ -53,10 +53,6 @@ class TFCluster(object):
   queues = None
   server = None
 
-  def start(self, map_fun, tf_args):
-    """*DEPRECATED*. use run() method instead of reserve/start."""
-    raise Exception("DEPRECATED: use run() method instead of reserve/start.")
-
   def train(self, dataRDD, num_epochs=0, qname='input'):
     """*For InputMode.SPARK only*.  Feeds Spark RDD partitions into the TensorFlow worker nodes
 
@@ -194,11 +190,9 @@ class TFCluster(object):
             tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
         return tb_url
 
-def reserve(sc, num_executors, num_ps, tensorboard=False, input_mode=InputMode.TENSORFLOW, queues=['input','output']):
-  """*DEPRECATED*. use run() method instead of reserve/start."""
-  raise Exception("DEPRECATED: use run() method instead of reserve/start.")
+def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputMode.TENSORFLOW, queues=['input', 'output']):
 
-def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputMode.TENSORFLOW, tb_logdir=None, queues=['input', 'output']):
+
   """Starts the TensorFlowOnSpark cluster and Runs the TensorFlow "main" function on the Spark executors
 
   Args:
@@ -209,6 +203,8 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
     :num_ps: number of Spark executors which are reserved for TensorFlow PS nodes.  All other executors will be used as TensorFlow worker nodes.
     :tensorboard: boolean indicating if the chief worker should spawn a Tensorboard server.
     :input_mode: TFCluster.InputMode
+    :log_dir: directory to save tensorboard event logs.  If None, defaults to a fixed path on local filesystem.
+    :driver_ps_nodes: run the PS nodes on the driver locally instead of on the spark executors; this help maximizing computing resources (esp. GPU). You will need to set cluster_size = num_executors + num_ps
     :queues: *INTERNAL_USE*
 
   Returns:
@@ -221,10 +217,14 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
   logging.info("Reserving TFSparkNodes {0}".format("w/ TensorBoard" if tb else ""))
   assert num_ps < num_executors
 
+  if driver_ps_nodes and input_mode != InputMode.TENSORFLOW:
+    raise Exception('running PS nodes on driver locally is only supported in InputMode.TENSORFLOW')
+
   # build a cluster_spec template using worker_nums
   cluster_template = {}
   cluster_template['ps'] = range(num_ps)
   cluster_template['worker'] = range(num_ps, num_executors)
+  logging.info("worker node range %s, ps node range %s" % (cluster_template['worker'], cluster_template['ps']))
 
   # get default filesystem from spark
   defaultFS = sc._jsc.hadoopConfiguration().get("fs.defaultFS")
@@ -250,8 +250,10 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
     'server_addr': server_addr
   }
 
-  app_id = str(sc.applicationId)
+
   nodeRDD = sc.parallelize(range(num_executors), num_executors)
+
+  app_id = sc.applicationId
 
   # start TF on a background thread (on Spark driver) to allow for feeding job
   def _start():

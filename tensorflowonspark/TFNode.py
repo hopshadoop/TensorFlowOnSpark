@@ -92,7 +92,7 @@ def start_cluster_server(ctx, num_gpus=0, rdma=False):
         # Create and start a server for the local task.
         time.sleep(10)
         if rdma:
-          server = tf.train.Server(cluster, ctx.job_name, ctx.task_index, protocol="grpc_rdma")
+          server = tf.train.Server(cluster, ctx.job_name, ctx.task_index, protocol="grpc+verbs")
         else:
           server = tf.train.Server(cluster, ctx.job_name, ctx.task_index)
         gpu_initialized = True
