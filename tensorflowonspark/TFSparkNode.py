@@ -279,11 +279,11 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
 
     if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
       # When running with GPUs
-      hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, param_string='TensorFlowOnSpark')
+      hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, 'TensorFlowOnSpark', 'run')
       tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
     elif not gpus_are_present_on_executors and job_name == 'worker' and task_index == 0:
       # When running with no GPUs
-      hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, param_string='TensorFlowOnSpark')
+      hdfs_exec_logdir, hdfs_appid_logdir = hdfs.create_directories(app_id, run_id, 'TensorFlowOnSpark', 'run')
       tb_proc = tensorboard.register(hdfs_exec_logdir, hdfs_appid_logdir, 0)
     else:
       # For non-chief workers
