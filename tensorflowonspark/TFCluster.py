@@ -25,6 +25,7 @@ from __future__ import print_function
 import logging
 import os
 import random
+import sys
 import threading
 import time
 from pyspark.streaming import DStream
@@ -33,6 +34,9 @@ import pydoop.hdfs as hdfs
 from . import reservation
 from . import TFManager
 from . import TFSparkNode
+
+# status of TF background job
+tf_status = {}
 
 class InputMode(object):
   """Enum for the input modes of data feeding."""
@@ -160,8 +164,15 @@ class TFCluster(object):
       workerRDD = self.sc.parallelize(range(workers), workers)
       workerRDD.foreachPartition(TFSparkNode.shutdown(self.cluster_info, self.queues))
 
+    # exit Spark application w/ err status if TF job had any errors
+    if 'error' in tf_status:
+      logging.error("Exiting Spark application with error status.")
+      self.sc.cancelAllJobs()
+      self.sc.stop()
+      sys.exit(1)
+
     logging.info("Shutting down cluster")
-    # shutdown queues and manageres for "PS" executors.
+    # shutdown queues and managers for "PS" executors.
     # note: we have to connect/shutdown from the spark driver, because these executors are "busy" and won't accept any other tasks.
     for node in ps_list:
       addr = node['addr']
@@ -190,8 +201,7 @@ class TFCluster(object):
           tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
       return tb_url
 
-def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputMode.TENSORFLOW, log_dir=None, driver_ps_nodes=False, queues=['input', 'output']):
-
+def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputMode.TENSORFLOW, log_dir=None, driver_ps_nodes=False, reservation_timeout=600, queues=['input', 'output']):
 
   """Starts the TensorFlowOnSpark cluster and Runs the TensorFlow "main" function on the Spark executors
 
@@ -205,6 +215,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
     :input_mode: TFCluster.InputMode
     :log_dir: directory to save tensorboard event logs.  If None, defaults to a fixed path on local filesystem.
     :driver_ps_nodes: run the PS nodes on the driver locally instead of on the spark executors; this help maximizing computing resources (esp. GPU). You will need to set cluster_size = num_executors + num_ps
+    :reservation_timeout: number of seconds after which cluster reservation times out (600 sec default)
     :queues: *INTERNAL_USE*
 
   Returns:
@@ -259,6 +270,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
   app_id = sc.applicationId
 
   # start TF on a background thread (on Spark driver) to allow for feeding job
+
   def _start():
     nodeRDD.foreachPartition(TFSparkNode.run(map_fun,
                                              tf_args,
@@ -270,8 +282,12 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
                                              0,
                                              background=(input_mode == InputMode.SPARK)))
 
-  t = threading.Thread(target=_start)
-  t.start()
+    t = threading.Thread(target=_start, args=(tf_status,))
+    # run as daemon thread so that in spark mode main thread can exit
+    # if feeder spark stage fails and main thread can't do explicit shutdown
+    t.daemon = True
+
+    t.start()
 
 
   # wait for executors to check GPU presence
@@ -282,7 +298,7 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
 
   # wait for executors to register and start TFNodes before continuing
   logging.info("Waiting for TFSparkNodes to start")
-  cluster_info = server.await_reservations()
+  cluster_info = server.await_reservations(sc, tf_status, reservation_timeout)
   logging.info("All TFSparkNodes started")
 
   # since our "primary key" for each executor's TFManager is (host, ppid), sanity check for duplicates
