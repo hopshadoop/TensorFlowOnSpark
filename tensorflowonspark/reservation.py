@@ -23,6 +23,7 @@ MAX_RETRIES = 3
 BUFSIZE = 1024*2
 
 
+
 class Reservations:
   """Thread-safe store for node reservations.
 
@@ -59,7 +60,7 @@ class Reservations:
       if executor['job_name'] == 'ps' and executor['gpu_present'] == True:
         logging.debug("Reservation.switch_all_wrongly_placed_ps: Found ps with GPU")
         ps_task_index = executor['task_index']
-        ps_worker_num = executor['worker_num']
+        ps_worker_num = executor['executor_id']
 
         #Found a worker with no GPU, but all should have GPUs!
         for innerIndex, candidate_replacement in enumerate(self.reservations):
@@ -68,11 +69,11 @@ class Reservations:
 
             executor['job_name'] = 'worker'
             executor['task_index'] = candidate_replacement['task_index']
-            executor['worker_num'] = candidate_replacement['worker_num']
+            executor['executor_id'] = candidate_replacement['executor_id']
 
             candidate_replacement['job_name'] = 'ps'
             candidate_replacement['task_index'] = ps_task_index
-            candidate_replacement['worker_num'] = ps_worker_num
+            candidate_replacement['executor_id'] = ps_worker_num
 
             self.reservations[innerIndex] = candidate_replacement
             self.reservations[outerIndex] = executor
@@ -225,7 +226,7 @@ class Server(MessageSocket):
     """
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_sock.bind(('',0))
+    server_sock.bind(('', 0))
     server_sock.listen(10)
 
     # hostname may not be resolvable but IP address probably will be
@@ -233,6 +234,7 @@ class Server(MessageSocket):
     port = server_sock.getsockname()[1]
     addr = (host,port)
     logging.info("listening for reservations and gpu presence check at {0}".format(addr))
+
 
     def _listen(self, sock):
       CONNECTIONS = []
@@ -265,6 +267,7 @@ class Server(MessageSocket):
   def stop(self):
     """Stop the Server's socket listener."""
     self.done = True
+
 
 class Client(MessageSocket):
   """Client to register and await node reservations.
