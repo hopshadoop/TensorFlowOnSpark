@@ -8,23 +8,29 @@ from __future__ import division
 from __future__ import nested_scopes
 from __future__ import print_function
 
+import json
 import logging
+import multiprocessing
 import os
-import sys
 import platform
 import socket
 import subprocess
-import multiprocessing
+import sys
 import uuid
+import time
+import traceback
+from threading import Thread
 
 from . import TFManager
 from . import TFNode
-from . import reservation
+from . import gpu_info
 from . import marker
 from . import gpu_info
+from . import reservation
 from . import util
 from hops import hdfs
 from hops import tensorboard
+
 
 
 class TFNodeContext:
@@ -34,7 +40,7 @@ class TFNodeContext:
   To simply the end-user API, this class now mirrors the functions of the TFNode module.
 
   Args:
-    :worker_num: integer identifier for this executor, per ``nodeRDD = sc.parallelize(range(num_executors), num_executors).``
+    :executor_id: integer identifier for this executor, per ``nodeRDD = sc.parallelize(range(num_executors), num_executors).``
     :job_name: TensorFlow job name (e.g. 'ps' or 'worker') of this TF node, per cluster_spec.
     :task_index: integer rank per job_name, e.g. "worker:0", "worker:1", "ps:0".
     :cluster_spec: dictionary for constructing a tf.train.ClusterSpec.
@@ -42,8 +48,9 @@ class TFNodeContext:
     :working_dir: the current working directory for local filesystems, or YARN containers.
     :mgr: TFManager instance for this Python worker.
   """
-  def __init__(self, worker_num, job_name, task_index, cluster_spec, defaultFS, working_dir, mgr):
-    self.worker_num = worker_num
+  def __init__(self, executor_id, job_name, task_index, cluster_spec, defaultFS, working_dir, mgr):
+    self.worker_num = executor_id       # for backwards-compatibility
+    self.executor_id = executor_id
     self.job_name = job_name
     self.task_index = task_index
     self.cluster_spec = cluster_spec
@@ -84,28 +91,38 @@ class TFSparkNode(object):
   mgr = None                #: TFManager instance
   cluster_id = None         #: Unique ID for a given TensorFlowOnSpark cluster, used for invalidating state for new clusters.
 
-def _get_manager(cluster_info, host, ppid):
+
+def _get_manager(cluster_info, host, executor_id):
   """Returns this executor's "singleton" instance of the multiprocessing.Manager, reconnecting per python-worker if needed.
 
   Args:
     :cluster_info: cluster node reservations
-    :host: host IP
-    :ppid: parent (executor JVM) PID
+    :host: host IP address
+    :executor_id: unique id per executor (created during initial call to run())
 
   Returns:
     TFManager instance for this executor/python-worker
   """
   for node in cluster_info:
-    if node['host'] == host and node['ppid'] == ppid:
+    if node['host'] == host and node['executor_id'] == executor_id:
       addr = node['addr']
       authkey = node['authkey']
-      TFSparkNode.mgr = TFManager.connect(addr,authkey)
+      TFSparkNode.mgr = TFManager.connect(addr, authkey)
       break
-  logging.info("Connected to TFSparkNode.mgr on {0}, ppid={1}, state={2}".format(host, ppid, str(TFSparkNode.mgr.get('state'))))
+
+  if TFSparkNode.mgr is None:
+    msg = "No TFManager found on this node, please ensure that:\n" + \
+          "1. Spark num_executors matches TensorFlow cluster_size\n" + \
+          "2. Spark cores/tasks per executor is 1.\n" + \
+          "3. Spark dynamic allocation is disabled."
+    raise Exception(msg)
+
+  logging.info("Connected to TFSparkNode.mgr on {0}, executor={1}, state={2}".format(host, executor_id, str(TFSparkNode.mgr.get('state'))))
   return TFSparkNode.mgr
 
-def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, background):
 
+
+def run(fn, tf_args, cluster_meta, tb, log_dir, app_id, run_id, queues, background):
   """Wraps the user-provided TensorFlow main function in a Spark mapPartitions function.
 
   Args:
@@ -121,9 +138,10 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
     A nodeRDD.mapPartitions() function.
   """
   def _mapfn(iter):
+
     # Note: consuming the input iterator helps Pyspark re-use this worker,
     for i in iter:
-      worker_num = i
+      executor_id = i
 
     # assign TF job/task based on provided cluster_spec template (or use default/null values)
     job_name = 'default'
@@ -132,21 +150,21 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
     cluster_template = cluster_meta['cluster_template']
     for jobtype in cluster_template:
       nodes = cluster_template[jobtype]
-      if worker_num in nodes:
+      if executor_id in nodes:
         job_name = jobtype
-        task_index = nodes.index(worker_num)
+        task_index = nodes.index(executor_id)
         break
 
-    # get unique id (hostname,ppid) for this executor's JVM
+    # get unique key (hostname, executor_id) for this executor
     host = util.get_ip_address()
-    ppid = os.getppid()
+    util.write_executor_id(executor_id)
     port = 0
 
     # check for existing TFManagers
     if TFSparkNode.mgr is not None and str(TFSparkNode.mgr.get('state')) != "'stopped'":
       if TFSparkNode.cluster_id == cluster_id:
         # raise an exception to force Spark to retry this "reservation" task on another executor
-        raise Exception("TFManager already started on {0}, ppid={1}, state={2}".format(host, ppid, str(TFSparkNode.mgr.get("state"))))
+        raise Exception("TFManager already started on {0}, executor={1}, state={2}".format(host, executor_id, str(TFSparkNode.mgr.get("state"))))
       else:
         # old state, just continue with creating new manager
         logging.warn("Ignoring old TFManager with cluster_id {0}, requested cluster_id {1}".format(TFSparkNode.cluster_id, cluster_id))
@@ -165,7 +183,7 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
     if TFSparkNode.mgr is not None and str(TFSparkNode.mgr.get('state')) != "'stopped'":
       if TFSparkNode.cluster_id == cluster_id:
         # raise an exception to force Spark to retry this "reservation" task on another executor
-        raise Exception("TFManager already started on {0}, ppid={1}, state={2}".format(host, ppid, str(TFSparkNode.mgr.get("state"))))
+        raise Exception("TFManager already started on {0}, state={1}".format(host, str(TFSparkNode.mgr.get("state"))))
       else:
         # old state, just continue with creating new manager
         logging.warn("Ignoring old TFManager with cluster_id {0}, requested cluster_id {1}".format(TFSparkNode.cluster_id, cluster_id))
@@ -179,13 +197,13 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
       #Valid PS, does not have GPUs, will be started as a PS
       if job_name == 'ps' and gpu_present == False:
         # PS nodes must be remotely accessible in order to shutdown from Spark driver.
-        TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
+        TFSparkNode.mgr = TFManager.start(authkey, ['control', 'error'], 'remote')
         addr = (host, TFSparkNode.mgr.address[1])
 
       #Invalid worker, all workers should have GPUs, this one will assume role as PS
       elif job_name == 'worker' and gpu_present == False:
         # PS nodes must be remotely accessible in order to shutdown from Spark driver.
-        TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
+        TFSparkNode.mgr = TFManager.start(authkey, ['control', 'error'], 'remote')
         addr = (host, TFSparkNode.mgr.address[1])
 
       #Correct worker
@@ -196,7 +214,7 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
     else:
       if job_name == 'ps':
         # PS nodes must be remotely accessible in order to shutdown from Spark driver.
-        TFSparkNode.mgr = TFManager.start(authkey, ['control'], 'remote')
+        TFSparkNode.mgr = TFManager.start(authkey, ['control', 'error'], 'remote')
         addr = (host, TFSparkNode.mgr.address[1])
       else:
         # worker nodes only need to be locally accessible within the executor for data feeding
@@ -218,15 +236,14 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
     # start TensorBoard if requested
     tb_pid = 0
     tb_port = 0
-
     # check server to see if this task is being retried (i.e. already reserved)
     client = reservation.Client(cluster_meta['server_addr'])
     cluster_info = client.get_reservations()
     tmp_sock = None
     node_meta = None
     for node in cluster_info:
-      (nhost, nppid) = (node['host'], node['ppid'])
-      if nhost == host and nppid == ppid:
+      (nhost, nexec) = (node['host'], node['executor_id'])
+      if nhost == host and nexec == executor_id:
         node_meta = node
         port = node['port']
 
@@ -235,13 +252,12 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
       # first, find a free port for TF
       tmp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
       tmp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-      tmp_sock.bind(('',port))
+      tmp_sock.bind(('', port))
       port = tmp_sock.getsockname()[1]
 
       node_meta = {
-        'worker_num': worker_num,
+        'executor_id': executor_id,
         'host': host,
-        'ppid': ppid,
         'job_name': job_name,
         'task_index': task_index,
         'port': port,
@@ -252,6 +268,7 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
         'gpu_present': gpu_present
       }
 
+
       # register node metadata with server
       logging.info("TFSparkNode.run register: {0}".format(node_meta))
       client.register(node_meta)
@@ -261,9 +278,13 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
       client.close()
 
     # construct a TensorFlow clusterspec from cluster_info
-    sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])
+    sorted_cluster_info = sorted(cluster_info, key=lambda k: k['executor_id'])
     spec = {}
+    last_executor_id = -1
     for node in sorted_cluster_info:
+      if (node['executor_id'] == last_executor_id):
+        raise Exception("Duplicate worker/task in cluster_info")
+      last_executor_id = node['executor_id']
       logging.info("node: {0}".format(node))
       (njob, nhost, nport) = (node['job_name'], node['host'], node['port'])
       hosts = [] if njob not in spec else spec[njob]
@@ -271,10 +292,10 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
       spec[njob] = hosts
 
     for node in cluster_info:
-      if ((node_meta['host'] == node['host']) and (node_meta['ppid'] == node['ppid'])):
+      if ((node_meta['host'] == node['host']) and (node_meta['authkey'] == node['authkey'])):
         job_name = node['job_name']
         task_index = node['task_index']
-        worker_num = node['worker_num']
+        executor_id = node['executor_id']
         break
 
     if gpus_are_present_on_executors and gpu_present and job_name == 'worker' and task_index == 0:
@@ -291,7 +312,7 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
       tensorboard.events_logdir = logdir
 
       # construct a TensorFlow clusterspec from cluster_info
-    sorted_cluster_info = sorted(cluster_info, key=lambda k: k['worker_num'])
+    sorted_cluster_info = sorted(cluster_info, key=lambda k: k['executor_id'])
     spec = {}
     for node in sorted_cluster_info:
       logging.info("node: {0}".format(node))
@@ -300,9 +321,17 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
       hosts.append("{0}:{1}".format(nhost, nport))
       spec[njob] = hosts
 
+    # update TF_CONFIG and reserve GPU for tf.estimator based code
+    # Note: this will execute but be ignored by non-tf.estimator code
+    tf_config = json.dumps({
+      'cluster': spec,
+      'task': {'type': job_name, 'index': task_index},
+      'environment': 'cloud'
+    })
+    os.environ['TF_CONFIG'] = tf_config
 
     # create a context object to hold metadata for TF
-    ctx = TFNodeContext(worker_num, job_name, task_index, spec, cluster_meta['default_fs'], cluster_meta['working_dir'], TFSparkNode.mgr)
+    ctx = TFNodeContext(executor_id, job_name, task_index, spec, cluster_meta['default_fs'], cluster_meta['working_dir'], TFSparkNode.mgr)
 
     # release port reserved for TF as late as possible
     if tmp_sock is not None:
@@ -324,11 +353,21 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
         sys.argv = args
       fn(args, context)
 
+    def wrapper_fn_background(args, context):
+      """Wrapper function that signals exceptions to foreground process."""
+      errq = TFSparkNode.mgr.get_queue('error')
+      try:
+        wrapper_fn(args, context)
+      except Exception:
+        errq.put(traceback.format_exc())
+        errq.join()
+
     if job_name == 'ps' or background:
       # invoke the TensorFlow main function in a background thread
       logging.info("Starting TensorFlow {0}:{1} as {2} on cluster node {3} on background process".format(
-        job_name, task_index, job_name, worker_num))
-      p = multiprocessing.Process(target=wrapper_fn, args=(tf_args, ctx))
+        job_name, task_index, job_name, executor_id))
+
+      p = multiprocessing.Process(target=wrapper_fn_background, args=(tf_args, ctx))
       if job_name == 'ps':
         p.daemon = True
       p.start()
@@ -336,9 +375,16 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
       # for ps nodes only, wait indefinitely in foreground thread for a "control" event (None == "stop")
       if job_name == 'ps':
         queue = TFSparkNode.mgr.get_queue('control')
+        equeue = TFSparkNode.mgr.get_queue('error')
         done = False
         while not done:
-          msg =  queue.get(block=True)
+          while (queue.empty() and equeue.empty()):
+            time.sleep(1)
+          if (not equeue.empty()):
+            e_str = equeue.get()
+            equeue.task_done()
+            raise Exception("exception in ps:\n" + e_str)
+          msg = queue.get(block=True)
           logging.info("Got msg: {0}".format(msg))
           if msg == None:
             logging.info("Terminating PS")
@@ -348,18 +394,18 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, queues, app_id, run_id, backgrou
     else:
 
       # otherwise, just run TF function in the main executor/worker thread
-      logging.info("Starting TensorFlow {0}:{1} on cluster node {2} on foreground thread".format(job_name, task_index, worker_num))
-      fn(tf_args, ctx)
-      logging.info("Finished TensorFlow {0}:{1} on cluster node {2}".format(job_name, task_index, worker_num))
-
+      logging.info("Starting TensorFlow {0}:{1} on cluster node {2} on foreground thread".format(job_name, task_index, executor_id))
+      wrapper_fn(tf_args, ctx)
+      logging.info("Finished TensorFlow {0}:{1} on cluster node {2}".format(job_name, task_index, executor_id))
 
   return _mapfn
+
 
 def train(cluster_info, cluster_meta, qname='input'):
   """Feeds Spark partitions into the shared multiprocessing.Queue.
 
   Args:
-    :cluster_info: node reservation information for the cluster (e.g. host, ppid, pid, ports, etc)
+    :cluster_info: node reservation information for the cluster (e.g. host, executor_id, pid, ports, etc)
     :cluster_meta: dictionary of cluster metadata (e.g. cluster_id, reservation.Server address, etc)
     :qname: *INTERNAL_USE*
 
@@ -368,8 +414,14 @@ def train(cluster_info, cluster_meta, qname='input'):
   """
   def _train(iter):
     # get shared queue, reconnecting if necessary
-    mgr = _get_manager(cluster_info, util.get_ip_address(), os.getppid())
-    queue = mgr.get_queue(qname)
+    mgr = _get_manager(cluster_info, util.get_ip_address(), util.read_executor_id())
+    try:
+      queue = mgr.get_queue(qname)
+      equeue = mgr.get_queue('error')
+    except (AttributeError, KeyError):
+      msg = "Queue '{}' not found on this node, check for exceptions on other nodes.".format(qname)
+      raise Exception(msg)
+
     state = str(mgr.get('state'))
     logging.info("mgr.state={0}".format(state))
     terminating = state == "'terminating'"
@@ -379,15 +431,23 @@ def train(cluster_info, cluster_meta, qname='input'):
       for item in iter:
         count += 1
       logging.info("Skipped {0} items from partition".format(count))
-
     else:
       logging.info("Feeding partition {0} into {1} queue {2}".format(iter, qname, queue))
       count = 0
       for item in iter:
         count += 1
         queue.put(item, block=True)
+
       # wait for consumers to finish processing all items in queue before "finishing" this iterator
-      queue.join()
+      joinThr = Thread(target=queue.join)
+      joinThr.start()
+      while (joinThr.isAlive()):
+        if (not equeue.empty()):
+          e_str = equeue.get()
+          equeue.task_done()
+          raise Exception("exception in worker:\n" + e_str)
+        time.sleep(1)
+#      queue.join()
       logging.info("Processed {0} items in partition".format(count))
 
     # check if TF is terminating feed after this partition
@@ -406,11 +466,12 @@ def train(cluster_info, cluster_meta, qname='input'):
 
   return _train
 
+
 def inference(cluster_info, qname='input'):
   """Feeds Spark partitions into the shared multiprocessing.Queue and returns inference results.
 
   Args:
-    :cluster_info: node reservation information for the cluster (e.g. host, ppid, pid, ports, etc)
+    :cluster_info: node reservation information for the cluster (e.g. host, executor_id, pid, ports, etc)
     :qname: *INTERNAL_USE*
 
   Returns:
@@ -418,8 +479,13 @@ def inference(cluster_info, qname='input'):
   """
   def _inference(iter):
     # get shared queue, reconnecting if necessary
-    mgr = _get_manager(cluster_info, util.get_ip_address(), os.getppid())
-    queue_in = mgr.get_queue(qname)
+    mgr = _get_manager(cluster_info, util.get_ip_address(), util.read_executor_id())
+    try:
+      queue_in = mgr.get_queue(qname)
+      equeue = mgr.get_queue('error')
+    except (AttributeError, KeyError):
+      msg = "Queue '{}' not found on this node, check for exceptions on other nodes.".format(qname)
+      raise Exception(msg)
 
     logging.info("Feeding partition {0} into {1} queue {2}".format(iter, qname, queue_in))
     count = 0
@@ -435,7 +501,15 @@ def inference(cluster_info, qname='input'):
       return []
 
     # wait for consumers to finish processing all items in queue before "finishing" this iterator
-    queue_in.join()
+    joinThr = Thread(target=queue_in.join)
+    joinThr.start()
+    while (joinThr.isAlive()):
+      if (not equeue.empty()):
+        e_str = equeue.get()
+        equeue.task_done()
+        raise Exception("exception in worker:\n" + e_str)
+      time.sleep(1)
+
     logging.info("Processed {0} items in partition".format(count))
 
     # read result queue
@@ -452,11 +526,12 @@ def inference(cluster_info, qname='input'):
 
   return _inference
 
+
 def shutdown(cluster_info, queues=['input']):
   """Stops all TensorFlow nodes by feeding ``None`` into the multiprocessing.Queues.
 
   Args:
-    :cluster_info: node reservation information for the cluster (e.g. host, ppid, pid, ports, etc).
+    :cluster_info: node reservation information for the cluster (e.g. host, executor_id, pid, ports, etc).
     :queues: *INTERNAL_USE*
 
   Returns:
@@ -464,14 +539,14 @@ def shutdown(cluster_info, queues=['input']):
   """
   def _shutdown(iter):
     host = util.get_ip_address()
-    ppid = os.getppid()
+    executor_id = util.read_executor_id()
 
     # reconnect to shared queue
-    mgr = _get_manager(cluster_info, host, ppid)
+    mgr = _get_manager(cluster_info, host, executor_id)
 
     # send SIGTERM to Tensorboard proc (if running)
     for node in cluster_info:
-      if node['host'] == host and node['ppid'] == ppid:
+      if node['host'] == host and node['executor_id'] == executor_id:
         tb_pid = node['tb_pid']
         if tb_pid != 0:
           logging.info("Stopping tensorboard (pid={0})".format(tb_pid))
@@ -480,9 +555,13 @@ def shutdown(cluster_info, queues=['input']):
     # terminate any listening queues
     logging.info("Stopping all queues")
     for q in queues:
-      queue = mgr.get_queue(q)
-      logging.info("Feeding None into {0} queue".format(q))
-      queue.put(None, block=True)
+      try:
+        queue = mgr.get_queue(q)
+        logging.info("Feeding None into {0} queue".format(q))
+        queue.put(None, block=True)
+      except (AttributeError, KeyError):
+        msg = "Queue '{}' not found on this node, check for exceptions on other nodes.".format(q)
+        raise Exception(msg)
 
     logging.info("Setting mgr.state to 'stopped'")
     mgr.set('state', 'stopped')

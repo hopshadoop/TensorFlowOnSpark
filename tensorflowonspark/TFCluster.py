@@ -25,6 +25,7 @@ from __future__ import print_function
 import logging
 import os
 import random
+import sys
 import threading
 import time
 from pyspark.streaming import DStream
@@ -34,10 +35,15 @@ from . import reservation
 from . import TFManager
 from . import TFSparkNode
 
+# status of TF background job
+tf_status = {}
+
+
 class InputMode(object):
   """Enum for the input modes of data feeding."""
   TENSORFLOW = 0                #: TensorFlow application is responsible for reading any data.
   SPARK = 1                     #: Spark is responsible for feeding data to the TensorFlow application via an RDD.
+
 
 class TFCluster(object):
 
@@ -160,8 +166,15 @@ class TFCluster(object):
       workerRDD = self.sc.parallelize(range(workers), workers)
       workerRDD.foreachPartition(TFSparkNode.shutdown(self.cluster_info, self.queues))
 
+    # exit Spark application w/ err status if TF job had any errors
+    if 'error' in tf_status:
+      logging.error("Exiting Spark application with error status.")
+      self.sc.cancelAllJobs()
+      self.sc.stop()
+      sys.exit(1)
+
     logging.info("Shutting down cluster")
-    # shutdown queues and manageres for "PS" executors.
+    # shutdown queues and managers for "PS" executors.
     # note: we have to connect/shutdown from the spark driver, because these executors are "busy" and won't accept any other tasks.
     for node in ps_list:
       addr = node['addr']
@@ -190,9 +203,8 @@ class TFCluster(object):
           tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
       return tb_url
 
-def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputMode.TENSORFLOW, log_dir=None, driver_ps_nodes=False, queues=['input', 'output']):
-
-
+def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mode=InputMode.TENSORFLOW,
+        log_dir=None, driver_ps_nodes=False, master_node=None, reservation_timeout=600, queues=['input', 'output', 'error']):
   """Starts the TensorFlowOnSpark cluster and Runs the TensorFlow "main" function on the Spark executors
 
   Args:
@@ -205,6 +217,8 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
     :input_mode: TFCluster.InputMode
     :log_dir: directory to save tensorboard event logs.  If None, defaults to a fixed path on local filesystem.
     :driver_ps_nodes: run the PS nodes on the driver locally instead of on the spark executors; this help maximizing computing resources (esp. GPU). You will need to set cluster_size = num_executors + num_ps
+    :master_node: name of the "master" or "chief" node in the cluster_template, used for `tf.estimator` applications.
+    :reservation_timeout: number of seconds after which cluster reservation times out (600 sec default)
     :queues: *INTERNAL_USE*
 
   Returns:
@@ -226,8 +240,13 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
   # build a cluster_spec template using worker_nums
   cluster_template = {}
   cluster_template['ps'] = range(num_ps)
-  cluster_template['worker'] = range(num_ps, num_executors)
-  logging.info("worker node range %s, ps node range %s" % (cluster_template['worker'], cluster_template['ps']))
+  if master_node is None:
+    cluster_template['worker'] = range(num_ps, num_executors)
+  else:
+    cluster_template[master_node] = range(num_ps, num_ps + 1)
+    if num_executors > num_ps + 1:
+      cluster_template['worker'] = range(num_ps + 1, num_executors)
+  logging.info("cluster_template: {}".format(cluster_template))
 
   # get default filesystem from spark
   defaultFS = sc._jsc.hadoopConfiguration().get("fs.defaultFS")
@@ -259,18 +278,27 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
   app_id = sc.applicationId
 
   # start TF on a background thread (on Spark driver) to allow for feeding job
-  def _start():
-    nodeRDD.foreachPartition(TFSparkNode.run(map_fun,
+
+  def _start(status):
+    try:
+      nodeRDD.foreachPartition(TFSparkNode.run(map_fun,
                                              tf_args,
                                              cluster_meta,
                                              tb,
                                              None,
-                                             queues,
                                              app_id,
                                              0,
+                                             queues,
                                              background=(input_mode == InputMode.SPARK)))
+    except Exception as e:
+      logging.error("Exception in TF background thread")
+      status['error'] = str(e)
 
-  t = threading.Thread(target=_start)
+  t = threading.Thread(target=_start, args=(tf_status,))
+  # run as daemon thread so that in spark mode main thread can exit
+  # if feeder spark stage fails and main thread can't do explicit shutdown
+  t.daemon = True
+
   t.start()
 
 
@@ -282,16 +310,36 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tb=False, input_mode=InputM
 
   # wait for executors to register and start TFNodes before continuing
   logging.info("Waiting for TFSparkNodes to start")
-  cluster_info = server.await_reservations()
+  cluster_info = server.await_reservations(sc, tf_status, reservation_timeout)
   logging.info("All TFSparkNodes started")
 
-  # since our "primary key" for each executor's TFManager is (host, ppid), sanity check for duplicates
+
+  # print cluster_info and extract TensorBoard URL
+  tb_url = None
+  for node in cluster_info:
+    logging.info(node)
+    if node['tb_port'] != 0:
+      tb_url = "http://{0}:{1}".format(node['host'], node['tb_port'])
+
+  if tb_url is not None:
+    logging.info("========================================================================================")
+    logging.info("")
+    logging.info("TensorBoard running at:       {0}".format(tb_url))
+    logging.info("")
+    logging.info("========================================================================================")
+
+  # since our "primary key" for each executor's TFManager is (host, executor_id), sanity check for duplicates
+
   # Note: this may occur if Spark retries failed Python tasks on the same executor.
   tb_nodes = set()
   for node in cluster_info:
-    node_id = (node['host'],node['ppid'])
+    node_id = (node['host'], node['executor_id'])
     if node_id in tb_nodes:
-      raise Exception("Duplicate cluster node id detected (host={0}, ppid={1}).  Please ensure that (1) the number of executors >= number of TensorFlow nodes, (2) the number of tasks per executors == 1, and (3) TFCluster.shutdown() is successfully invoked when done.".format(node_id[0], node_id[1]))
+      raise Exception("Duplicate cluster node id detected (host={0}, executor_id={1})".format(node_id[0], node_id[1]) +
+                      "Please ensure that:\n" +
+                      "1. Number of executors >= number of TensorFlow nodes\n" +
+                      "2. Number of tasks per executors is 1\n" +
+                      "3, TFCluster.shutdown() is successfully invoked when done.")
     else:
       tb_nodes.add(node_id)
 
