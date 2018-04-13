@@ -18,6 +18,7 @@ import subprocess
 import sys
 import uuid
 import time
+import threading
 import traceback
 from threading import Thread
 
@@ -30,6 +31,7 @@ from . import reservation
 from . import util
 from hops import hdfs
 from hops import tensorboard
+from hops import devices
 
 
 
@@ -393,11 +395,19 @@ def run(fn, tf_args, cluster_meta, tb, log_dir, app_id, run_id, queues, backgrou
           queue.task_done()
     else:
 
+      t = threading.Thread(target=devices.print_periodic_gpu_utilization)
+      if devices.get_num_gpus() > 0:
+        t.start()
+
       # otherwise, just run TF function in the main executor/worker thread
       logging.info("Starting TensorFlow {0}:{1} on cluster node {2} on foreground thread".format(job_name, task_index, executor_id))
       wrapper_fn(tf_args, ctx)
       logging.info("Finished TensorFlow {0}:{1} on cluster node {2}".format(job_name, task_index, executor_id))
 
+      if devices.get_num_gpus() > 0:
+        t.do_run = False
+        t.join()
+              
   return _mapfn
 
 
