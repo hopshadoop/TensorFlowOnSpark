@@ -24,7 +24,6 @@ from threading import Thread
 
 from . import TFManager
 from . import TFNode
-from . import gpu_info
 from . import marker
 from . import gpu_info
 from . import reservation

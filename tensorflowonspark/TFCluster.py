@@ -29,7 +29,11 @@ import sys
 import threading
 import time
 from pyspark.streaming import DStream
-import pydoop.hdfs as hdfs
+from hops import hdfs as hopshdfs
+from hops import util
+import atexit
+from datetime import datetime
+import json
 
 from . import reservation
 from . import TFManager
@@ -38,6 +42,10 @@ from . import TFSparkNode
 # status of TF background job
 tf_status = {}
 
+elastic_id = 0
+experiment_json = None
+running = False
+app_id = None
 
 class InputMode(object):
   """Enum for the input modes of data feeding."""
@@ -159,6 +167,8 @@ class TFCluster(object):
           else:
             done = True
 
+
+
       # shutdown queues and managers for "worker" executors.
       # note: in SPARK mode, this job will immediately queue up behind the "data feeding" job.
       # in TENSORFLOW mode, this will only run after all workers have finished.
@@ -169,9 +179,16 @@ class TFCluster(object):
     # exit Spark application w/ err status if TF job had any errors
     if 'error' in tf_status:
       logging.error("Exiting Spark application with error status.")
+      exception_handler()
       self.sc.cancelAllJobs()
       self.sc.stop()
       sys.exit(1)
+    global experiment_json
+    global app_id
+    experiment_json = util.finalize_experiment(experiment_json, '', '')
+
+    util.put_elastic(hopshdfs.project_name(), app_id, str('dist' + str(elastic_id)), experiment_json)
+
 
     logging.info("Shutting down cluster")
     # shutdown queues and managers for "PS" executors.
@@ -204,7 +221,7 @@ class TFCluster(object):
       return tb_url
 
 def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mode=InputMode.TENSORFLOW,
-        log_dir=None, driver_ps_nodes=False, master_node=None, reservation_timeout=600, queues=['input', 'output', 'error']):
+        log_dir=None, driver_ps_nodes=False, master_node=None, reservation_timeout=600, name='no-name', queues=['input', 'output', 'error']):
   """Starts the TensorFlowOnSpark cluster and Runs the TensorFlow "main" function on the Spark executors
 
   Args:
@@ -226,7 +243,11 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
   """
 
   #in hopsworks we want the tensorboard to always be true:
+  global elastic_id
+  global running
   tb=True
+  elastic_id = elastic_id + 1
+  running = True
 
   logging.info("Reserving TFSparkNodes {0}".format("w/ TensorBoard" if tb else ""))
   assert num_ps < num_executors
@@ -274,8 +295,13 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
 
 
   nodeRDD = sc.parallelize(range(num_executors), num_executors)
-
+  global app_id
   app_id = sc.applicationId
+  global experiment_json
+  experiment_json = None
+  experiment_json = util.populate_experiment(sc, name, 'TFCluster', 'run')
+
+  util.put_elastic(hopshdfs.project_name(), app_id, str('dist' + str(elastic_id)), experiment_json)
 
   # start TF on a background thread (on Spark driver) to allow for feeding job
 
@@ -355,3 +381,26 @@ def run(sc, map_fun, tf_args, num_executors, num_ps, tensorboard=False, input_mo
   cluster.server = server
 
   return cluster
+
+
+def exception_handler():
+  global experiment_json
+  global elastic_id
+  if running:
+    experiment_json = json.loads(experiment_json)
+    experiment_json['status'] = "FAILED"
+    experiment_json['finished'] = datetime.now().isoformat()
+    experiment_json = json.dumps(experiment_json)
+    util.put_elastic(hopshdfs.project_name(), app_id, str('dist' + str(elastic_id)), experiment_json)
+
+def exit_handler():
+  global experiment_json
+  global elastic_id
+  if running:
+    experiment_json = json.loads(experiment_json)
+    experiment_json['status'] = "KILLED"
+    experiment_json['finished'] = datetime.now().isoformat()
+    experiment_json = json.dumps(experiment_json)
+    util.put_elastic(hopshdfs.project_name(), app_id, str('dist' + str(elastic_id)), experiment_json)
+
+atexit.register(exit_handler)
